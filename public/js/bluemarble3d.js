@@ -221,9 +221,9 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     const grad = ctx.createRadialGradient(S / 2, S / 2, 40, S / 2, S / 2, S * 0.72);
-    grad.addColorStop(0, '#e8f7e6');
-    grad.addColorStop(0.62, '#cfeacb');
-    grad.addColorStop(1, '#aed6b4');
+    grad.addColorStop(0, '#eef9ec');
+    grad.addColorStop(0.62, '#d9eed6');
+    grad.addColorStop(1, '#c2e0c6');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, S, S);
 
@@ -243,20 +243,20 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const title = label || '세계여행 마블';
-    let titleSize = 74;
+    let titleSize = 62;
     ctx.font = '700 ' + titleSize + 'px "Jua", "Gowun Dodum", sans-serif';
-    while (titleSize > 26 && ctx.measureText(title).width > S * 0.82) {
+    while (titleSize > 26 && ctx.measureText(title).width > S * 0.74) {
       titleSize -= 4;
       ctx.font = '700 ' + titleSize + 'px "Jua", "Gowun Dodum", sans-serif';
     }
-    ctx.fillStyle = '#4a3a32';
-    ctx.fillText(title, S / 2, S / 2 - 26);
-    ctx.fillStyle = '#7a9a7f';
-    ctx.font = '600 26px "Gowun Dodum", sans-serif';
-    ctx.fillText('3D BOARD GAME', S / 2, S / 2 + 46);
+    ctx.fillStyle = '#6b5647';
+    ctx.fillText(title, S / 2, S / 2 - 30);
+    ctx.fillStyle = '#7d9c80';
+    ctx.font = '600 24px "Gowun Dodum", sans-serif';
+    ctx.fillText('3D BOARD GAME', S / 2, S / 2 + 36);
     ctx.fillStyle = '#9ab39c';
-    ctx.font = '500 20px "Gowun Dodum", sans-serif';
-    ctx.fillText('보드게임천국', S / 2, S / 2 + 90);
+    ctx.font = '500 19px "Gowun Dodum", sans-serif';
+    ctx.fillText('보드게임천국', S / 2, S / 2 + 76);
 
     // 나침반
     ctx.strokeStyle = 'rgba(120,160,130,0.5)';
@@ -473,13 +473,13 @@
       const mats = textures.map(function (tex) { return new THREE.MeshLambertMaterial({ map: tex }); });
 
       const makeDie = function (x) {
-        const die = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.78, 0.78), mats);
+        const die = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.68, 0.68), mats);
         die.castShadow = true;
         die.receiveShadow = true;
-        die.position.set(x, 0.55, 1.15);
+        die.position.set(x, 0.2, 1.95);
         return die;
       };
-      this.dice = { a: makeDie(-0.55), b: makeDie(0.55), anim: null };
+      this.dice = { a: makeDie(-0.44), b: makeDie(0.44), anim: null };
       this.scene.add(this.dice.a);
       this.scene.add(this.dice.b);
       this.dice.a.rotation.set(0.1, 0.2, 0);
@@ -674,9 +674,10 @@
         const tex = new THREE.CanvasTexture(spriteCanvas);
         const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
         const sprite = new THREE.Sprite(mat);
-        sprite.scale.set(0.78, 0.39, 1);
-        sprite.position.set(0, 0.68, 0);
+        sprite.scale.set(0.64, 0.32, 1);
+        sprite.position.set(0, 0.64, 0);
         group.add(sprite);
+        group.userData.label = sprite;
       }
       group.userData.playerId = player.id;
       return group;
@@ -692,7 +693,9 @@
         seen[p.id] = true;
         const count = byPos[p.pos] || 1;
         const order = state.players.filter(function (o) { return o.pos === p.pos; }).indexOf(p);
-        const offset = count > 1 ? { x: Math.cos(order * 2 * Math.PI / count) * 0.17, z: Math.sin(order * 2 * Math.PI / count) * 0.17 } : { x: 0, z: 0 };
+        const slots = [[-0.21, -0.19], [0.21, -0.19], [-0.21, 0.21], [0.21, 0.21]];
+        const slot = count > 1 ? slots[order % slots.length] : [0, 0];
+        const offset = { x: slot[0], z: slot[1] };
 
         let group = self.tokenGroups.get(p.id);
         if (!group) {
@@ -704,6 +707,7 @@
           self.scene.add(group);
         }
         group.visible = !p.bankrupt;
+        if (group.userData.label) group.userData.label.visible = count <= 2;
 
         const walk = self.tokenWalk.get(p.id);
         const tile = p.pos;
@@ -812,7 +816,7 @@
             anim.startRot[i].y + spin * 1.3,
             anim.startRot[i].z + spin * 0.7
           );
-          die.position.y = 0.52 + Math.abs(Math.sin(t * Math.PI * 5)) * (0.55 * (1 - t));
+          die.position.y = 0.2 + Math.abs(Math.sin(t * Math.PI * 5)) * (0.55 * (1 - t));
           die.position.x = anim.startPos[i].x + Math.sin(t * Math.PI * 3 + i) * 0.16 * (1 - t);
         }
         return;
@@ -827,14 +831,14 @@
       for (let i = 0; i < 2; i++) {
         const die = dice[i];
         die.quaternion.copy(anim.settle[i]).slerp(anim.targets[i], ease);
-        die.position.y = 0.52 + Math.sin(k * Math.PI) * 0.08;
+        die.position.y = 0.2 + Math.sin(k * Math.PI) * 0.08;
         die.position.x = anim.startPos[i].x;
       }
       if (t >= 1) {
         for (let i = 0; i < 2; i++) {
           dice[i].quaternion.copy(anim.targets[i]);
           dice[i].rotation.setFromQuaternion(dice[i].quaternion);
-          dice[i].position.set(anim.startPos[i].x, 0.52, anim.startPos[i].z);
+          dice[i].position.set(anim.startPos[i].x, 0.2, anim.startPos[i].z);
         }
         this.dice.anim = null;
       }
