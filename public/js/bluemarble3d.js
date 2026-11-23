@@ -455,6 +455,7 @@
       }
 
       // 보드 위 작은 구름 장식 (분위기)
+      const scene = this.scene;
       const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 });
       [[-5.6, 1.5, -5.2], [5.8, 1.9, 5.0], [5.6, 1.4, -5.4]].forEach(function (c) {
         const cloud = new THREE.Group();
@@ -464,7 +465,7 @@
           cloud.add(ball);
         });
         cloud.position.set(c[0], c[1], c[2]);
-        this.scene.add(cloud);
+        scene.add(cloud);
       });
     }
 
@@ -688,7 +689,7 @@
     }
 
     updateTokens(state) {
-      const THREE = this.THREE;
+      const self = this;
       const seen = {};
       const byPos = {};
       state.players.forEach(function (p) { byPos[p.pos] = (byPos[p.pos] || 0) + 1; });
@@ -699,29 +700,27 @@
         const order = state.players.filter(function (o) { return o.pos === p.pos; }).indexOf(p);
         const offset = count > 1 ? { x: Math.cos(order * 2 * Math.PI / count) * 0.17, z: Math.sin(order * 2 * Math.PI / count) * 0.17 } : { x: 0, z: 0 };
 
-        let group = this.tokenGroups.get(p.id);
+        let group = self.tokenGroups.get(p.id);
         if (!group) {
-          group = this.makeToken(p);
+          group = self.makeToken(p);
           const start = tilePosition(p.pos);
           group.position.set(start.x + offset.x, 0.06, start.z + offset.z);
           group.userData.tile = p.pos;
-          this.tokenGroups.set(p.id, group);
-          this.scene.add(group);
+          self.tokenGroups.set(p.id, group);
+          self.scene.add(group);
         }
-        group.visible = !p.bankrupt || !p.eliminated;
-        if (p.bankrupt) group.visible = false;
+        group.visible = !p.bankrupt;
 
-        const walk = this.tokenWalk.get(p.id);
+        const walk = self.tokenWalk.get(p.id);
         const tile = p.pos;
         if (!walk && group.userData.tile !== tile) {
-          this.startWalk(p.id, group, group.userData.tile, tile, offset);
+          self.startWalk(p.id, group, group.userData.tile, tile, offset);
         } else if (walk && !walk.offset) {
           walk.offset = offset;
         }
       });
 
       // 사라진 플레이어 토큰 정리
-      const self = this;
       this.tokenGroups.forEach(function (group, id) {
         if (!seen[id] && self.tokenGroups.has(id)) {
           self.scene.remove(group);
