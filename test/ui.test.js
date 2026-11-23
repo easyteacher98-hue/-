@@ -83,7 +83,7 @@ function createClass(env, name, pin) {
     const timer = setTimeout(function () { reject(new Error('반 생성 시간 초과')); }, 4000);
     ws.on('error', reject);
     ws.on('open', function () {
-      ws.send(JSON.stringify({ t: 'classCreate', name: name || '테스트 반', pin: pin || '2451' }));
+      ws.send(JSON.stringify({ t: 'classCreate', teacherCode: 'easy', name: name || '테스트 반', pin: pin || '2451' }));
     });
     ws.on('message', function (raw) {
       let msg;
@@ -99,25 +99,47 @@ function createClass(env, name, pin) {
 
 /* ---------------- 첫 화면 ---------------- */
 
-test('맨 첫 화면은 [선생님: 우리 반 만들기]와 [학생: 반 코드로 입장] 두 가지만 있고, 게임 바로 플레이는 없다', async function () {
+test('첫 화면은 학생 [반 코드로 입장하기] 카드 하나만 크게 보여 주고, 교사 개설은 교사용 화면에서만 된다', async function () {
   const env = await boot();
   const dom = await openPage(env.base + '/');
   const window = dom.window;
   try {
     await waitFor(function () { return window.document.querySelector('.role-grid'); }, '첫 화면 역할 카드');
-    assert.equal(window.document.querySelectorAll('.role-card').length, 2);
-    assert.match(window.document.body.textContent, /우리 반 만들기/);
+    assert.equal(window.document.querySelectorAll('.role-card').length, 1, '학생 카드 하나만');
+    assert.ok(window.document.querySelector('.role-card.student'), '학생 카드');
+    assert.equal(window.document.querySelector('.role-card.teacher'), null, '첫 화면에는 교사 카드가 없다');
+    assert.equal(window.document.querySelector('#class-name'), null, '첫 화면에서는 반을 만들 수 없다');
     assert.match(window.document.body.textContent, /반 코드로 입장/);
+    assert.doesNotMatch(window.document.body.textContent, /우리 반 만들기/);
     assert.equal(window.document.querySelectorAll('.game-card').length, 0, '첫 화면에는 게임 플레이 버튼이 없다');
-    assert.ok(window.document.querySelector('#class-name'), '반 이름 입력');
-    assert.ok(window.document.querySelector('#class-pin'), '교사 PIN 입력');
     assert.ok(window.document.querySelector('#join-class-code'), '반 코드 입력');
     assert.equal(window.document.querySelectorAll('.role-ready .ready-chip').length, 3, '학생 준비물 안내');
     assert.match(window.document.querySelector('.site-credit').textContent, /Made by easy/);
+    assert.ok(window.document.querySelector('.site-credit .teacher-link'), '푸터의 교사용 링크');
 
-    // 반 만들기 → 코드·전용 링크 안내 → 우리 반 열기
-    type(window, '#class-name', '3학년 2반');
+    // 푸터의 '교사용' 링크 → 교사 전용 개설 화면
+    click(window, '.site-credit .teacher-link');
+    await waitFor(function () { return window.document.querySelector('#teacher-create-code'); }, '교사 개설 화면');
+    assert.match(window.location.hash, /^#\/teacher/);
+    assert.equal(window.document.querySelectorAll('.role-card').length, 1);
+    assert.match(window.document.body.textContent, /우리 반 만들기/);
+    assert.ok(window.document.querySelector('#class-name'), '반 이름 입력');
+    assert.ok(window.document.querySelector('#class-pin'), '교사 PIN 입력');
+    assert.ok(window.document.querySelector('#teacher-create-code'), '교사 개설 암호 입력');
+
+    // 교사 개설 암호가 틀리면 서버가 거절한다
+    type(window, '#class-name', '몰래 만든 반');
     type(window, '#class-pin', '2451');
+    type(window, '#teacher-create-code', 'not-easy');
+    click(window, '[data-action="portal.createClass"]');
+    await waitFor(function () {
+      const toast = window.document.getElementById('toast');
+      return toast && /개설 암호/.test(toast.textContent);
+    }, '개설 암호 안내');
+    assert.equal(window.document.querySelector('.class-code-big'), null, '반이 만들어지지 않는다');
+
+    // 암호가 맞으면 반 만들기 → 코드·전용 링크 안내 → 우리 반 열기
+    type(window, '#teacher-create-code', 'easy');
     click(window, '[data-action="portal.createClass"]');
     await waitFor(function () { return window.document.querySelector('.class-code-big'); }, '반 코드 안내');
     const code = window.document.querySelector('.class-code-big').textContent.trim();
@@ -127,7 +149,7 @@ test('맨 첫 화면은 [선생님: 우리 반 만들기]와 [학생: 반 코드
 
     click(window, '[data-action="portal.openCreated"]');
     await waitFor(function () {
-      return /3학년 2반/.test(window.document.body.textContent) &&
+      return /몰래 만든 반/.test(window.document.body.textContent) &&
         window.document.querySelector('.game-grid .game-card');
     }, '우리 반 게임 포털');
     assert.match(window.location.hash, /^#\/class\//);
@@ -135,26 +157,27 @@ test('맨 첫 화면은 [선생님: 우리 반 만들기]와 [학생: 반 코드
     assert.match(window.document.body.textContent, new RegExp(code));
     assert.ok(window.document.querySelector('[href="#/halligalli/teacher"]'), '선생님 모드');
     assert.ok(window.document.querySelector('.game-card.playable'), '할리갈리 카드');
+    assert.ok(window.document.querySelector('[href="#/bluemarble"]'), '부루마블 카드');
 
-    // '다른 반'으로 돌아가면 최근 우리 반 목록에 남아 있다
+    // '다른 반'으로 돌아가면 첫 화면으로 돌아간다
     click(window, '[data-action="portal.changeClass"]');
-    await waitFor(function () { return window.document.querySelector('.role-grid'); }, '첫 화면 복귀');
-    await waitFor(function () { return /최근 우리 반/.test(window.document.body.textContent); }, '최근 반 목록');
-    assert.match(window.document.querySelector('.recent-chip').textContent, /3학년 2반/);
+    await waitFor(function () { return window.document.querySelector('.role-grid.solo'); }, '첫 화면 복귀');
+    assert.equal(window.document.querySelectorAll('.role-card').length, 1, '복귀해도 학생 카드 하나만');
   } finally {
     window.close();
     await env.hub.close();
   }
 });
 
-test('반 생성 화면에서 PIN 형식이 틀리면 안내하고 만들지 않는다', async function () {
+test('교사용 화면에서 PIN 형식이 틀리면 안내하고 만들지 않는다', async function () {
   const env = await boot();
-  const dom = await openPage(env.base + '/');
+  const dom = await openPage(env.base + '/#/teacher');
   const window = dom.window;
   try {
-    await waitFor(function () { return window.document.querySelector('.role-grid'); }, '첫 화면');
+    await waitFor(function () { return window.document.querySelector('#teacher-create-code'); }, '교사 개설 화면');
     type(window, '#class-name', '검사 반');
     type(window, '#class-pin', '12');
+    type(window, '#teacher-create-code', 'easy');
     click(window, '[data-action="portal.createClass"]');
     await waitFor(function () {
       const toast = window.document.getElementById('toast');

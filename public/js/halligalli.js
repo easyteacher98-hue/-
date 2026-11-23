@@ -1461,6 +1461,11 @@
   BG.net.on('game_result', function (msg) {
     if (!msg || msg.classCode !== BG.state.classCode) return;
     S.stats = msg.stats || S.stats;
+    if (msg.gameId && msg.gameId !== 'halligalli') {
+      refreshRoomList();
+      if (screenName() === 'class' && BG.portal) BG.portal.classPortalHtml();
+      return;
+    }
     S.lastResult = msg;
     if (S.lastResultAt !== msg.recordedAt && BG.markResultSeen(msg.classCode + ':' + msg.recordedAt)) {
       S.lastResultAt = msg.recordedAt;
@@ -1488,6 +1493,7 @@
   });
 
   BG.net.on('joined', function (msg) {
+    if (!msg || msg.gameId !== 'halligalli') return;
     S.pendingJoin = null;
     S.resumeSent = {};
     saveSeat({ gameId: 'halligalli', code: msg.code, token: msg.token, playerId: msg.playerId });
@@ -1500,6 +1506,7 @@
   });
 
   BG.net.on('room', function (msg) {
+    if (!msg || !msg.room || msg.room.gameId !== 'halligalli') return;
     S.room = msg.room;
     S.role = msg.room.role;
     if (msg.room.game) playBellSound(msg.room.game);
@@ -1509,6 +1516,7 @@
   });
 
   BG.net.on('spectating', function (msg) {
+    if (msg && msg.gameId && msg.gameId !== 'halligalli') return;
     BG.ui.toast(msg.name + ' 관전을 시작합니다.', 'ok');
   });
 
@@ -1529,6 +1537,7 @@
   });
 
   BG.net.on('room_reset', function (msg) {
+    if (msg && msg.gameId && msg.gameId !== 'halligalli') return;
     BG.ui.toast(msg.message || '방이 초기화되었습니다.', 'ok');
     const seat = getSeat();
     if (seat && String(seat.code) === String(msg.code)) clearSeat();
@@ -1550,6 +1559,8 @@
   });
 
   BG.net.on('error', function (msg) {
+    const hgPath = BG.currentPath().indexOf('/halligalli') === 0;
+    if (!hgPath) return;
     BG.ui.toast(msg.message || '요청을 처리할 수 없습니다.', 'error');
     const code = msg.code;
     if (code === 'teacher_auth_required') {

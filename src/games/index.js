@@ -14,8 +14,9 @@
 'use strict';
 
 const halligalli = require('./halligalli');
+const bluemarble = require('./bluemarble');
 
-const registry = [halligalli];
+const registry = [halligalli, bluemarble];
 
 // 아직 구현되지 않은 게임: 목록에는 보이지만 방/서버 로직은 없음
 const planned = [

@@ -22,9 +22,19 @@
       action: '지금 플레이'
     },
     {
+      id: 'bluemarble',
+      title: '부루마블 (3D)',
+      emoji: '🎲',
+      desc: '주사위를 굴려 도시를 사고, 별장·빌딩·호텔을 세워 통행료를 받는 3D 보드게임. 드래그로 보드를 돌려 보세요.',
+      players: '2~4명 · 모둠당 4명',
+      status: 'ready',
+      href: '#/bluemarble',
+      action: '지금 플레이'
+    },
+    {
       id: 'yutnori',
       title: '윷놀이',
-      emoji: '🎲',
+      emoji: '🎯',
       desc: '윷가락을 던져 말을 옮기는 우리나라 전통 보드게임. 모둠 대항전으로 준비하고 있습니다.',
       players: '2~4팀',
       status: 'coming',
@@ -111,34 +121,13 @@
       '<section class="portal-hero landing-hero">' +
         '<div class="portal-kicker">모둠 수업 보드게임</div>' +
         '<h1 class="portal-title">보드게임<em>천국</em></h1>' +
-        '<p class="portal-sub">선생님은 <b>우리 반</b>을 만들고, 학생은 <b>반 코드</b>로 입장해요.<br>' +
+        '<p class="portal-sub">선생님이 알려 준 <b>반 코드</b>로 입장해요.<br>' +
           '반마다 1~6모둠이 따로 열려서 다른 반과 섞이지 않습니다.</p>' +
         '<div class="hero-fruits" aria-hidden="true">' + heroFruits + '</div>' +
       '</section>' +
 
-      '<div class="role-grid">' +
-        '<section class="role-card teacher" id="teacher-card">' +
-          '<div class="role-head">' +
-            '<span class="role-emoji">👩‍🏫</span>' +
-            '<div><div class="role-title">선생님</div><div class="role-sub">우리 반 만들기</div></div>' +
-          '</div>' +
-          '<div class="stack">' +
-            '<label class="field">반 이름' +
-              '<input id="class-name" class="input" maxlength="20" placeholder="예: 3학년 2반" autocomplete="off">' +
-            '</label>' +
-            '<label class="field">반 코드 <span class="hint">(비워 두면 자동으로 만들어요)</span>' +
-              '<input id="class-code" class="input mono" maxlength="8" placeholder="예: 3-2BAN 또는 자동" autocomplete="off">' +
-            '</label>' +
-            '<label class="field">교사 비밀번호 (숫자 4~8자리)' +
-              '<input id="class-pin" class="input" type="password" inputmode="numeric" maxlength="8" placeholder="예: 2451" autocomplete="new-password">' +
-            '</label>' +
-            '<p class="hint">이 비밀번호를 아는 선생님만 우리 반의 교사 관전과 방 초기화를 할 수 있어요.</p>' +
-            '<button class="btn btn-primary btn-block role-submit" data-action="portal.createClass">' +
-              '우리 반 만들기 →</button>' +
-          '</div>' +
-        '</section>' +
-
-        '<section class="role-card student" id="student-card">' +
+      '<div class="role-grid solo">' +
+        '<section class="role-card student student-main" id="student-card">' +
           '<div class="role-head">' +
             '<span class="role-emoji">🎒</span>' +
             '<div><div class="role-title">학생</div><div class="role-sub">반 코드로 입장하기</div></div>' +
@@ -151,7 +140,7 @@
             (codeValue
               ? '<p class="hint">이 기기에서 마지막으로 쓴 반: <b>' + esc(BG.className() || codeValue) + '</b> (' + esc(codeValue) + ')</p>'
               : '<p class="hint">링크로 들어오면 반 코드를 넣지 않아도 바로 입장돼요.</p>') +
-            '<button class="btn btn-primary btn-block role-submit" data-action="portal.enterClass">' +
+            '<button class="btn btn-primary btn-block role-submit role-submit-big" data-action="portal.enterClass">' +
               '입장하기 →</button>' +
             '<p class="hint">입장한 뒤에는 이름 대신 <b>출석번호</b>만 고르면 됩니다.</p>' +
             '<div class="role-ready">' +
@@ -166,32 +155,76 @@
 
       recentHtml() +
 
-      '<section class="panel" style="margin-top:22px">' +
-        '<div class="panel-title">🎒 수업에서 이렇게 써요</div>' +
-        '<div class="row" style="gap:14px;align-items:stretch">' +
-          '<div class="tool-card" style="cursor:default;flex:1;min-width:190px">' +
-            '<div class="tool-emoji">1️⃣</div><div class="tool-body"><div class="tool-title">반 만들기</div>' +
-            '<div class="tool-desc">선생님이 반 이름과 비밀번호로 우리 반을 열고 링크를 학생에게 보냅니다.</div></div>' +
-          '</div>' +
-          '<div class="tool-card" style="cursor:default;flex:1;min-width:190px">' +
-            '<div class="tool-emoji">2️⃣</div><div class="tool-body"><div class="tool-title">번호로 입장</div>' +
-            '<div class="tool-desc">학생은 반 코드(또는 링크)로 들어와 자기 출석번호와 모둠을 고릅니다.</div></div>' +
-          '</div>' +
-          '<div class="tool-card" style="cursor:default;flex:1;min-width:190px">' +
-            '<div class="tool-emoji">3️⃣</div><div class="tool-body"><div class="tool-title">선생님은 관전</div>' +
-            '<div class="tool-desc">교사 비밀번호로 인증하면 우리 반 6개 모둠을 실시간으로 봅니다.</div></div>' +
-          '</div>' +
-        '</div>' +
-      '</section>' +
-
       '<div class="portal-foot">' +
         '<span><span class="conn-dot ' + (connected ? 'on' : '') + '"></span>' +
           (connected ? '실시간 서버 연결됨' : '서버 연결 없음 — AI 봇 연습과 규칙은 그대로 사용할 수 있어요') + '</span>' +
         '<span class="spacer"></span>' +
         '<a class="foot-link" href="#/halligalli/bot">🤖 AI 봇 연습</a>' +
+        '<a class="foot-link" href="#/teacher">👩‍🏫 교사용</a>' +
       '</div>';
 
     BG.ui.screen(html, 'portal');
+  }
+
+  /* ---------------- 선생님 전용: 우리 반 만들기 ---------------- */
+
+  function teacherHtml() {
+    const recent = BG.recentClasses();
+    const html =
+      '<div class="entry-top">' +
+        '<a class="back-link" href="#/">← 학생 입장 화면</a>' +
+        '<span class="spacer"></span>' +
+        '<span class="badge">👩‍🏫 교사용</span>' +
+      '</div>' +
+      '<section class="portal-hero teacher-hero">' +
+        '<div class="portal-kicker">선생님 전용</div>' +
+        '<h1 class="portal-title">우리 반 <em>만들기</em></h1>' +
+        '<p class="portal-sub">반 이름과 교사 비밀번호를 정하면 <b>반 코드</b>와 <b>학생용 링크</b>가 만들어집니다.<br>' +
+          '학생은 이 링크로 바로 들어와 출석번호만 고르면 됩니다.</p>' +
+      '</section>' +
+
+      (recent.length
+        ? '<div class="recent-class"><span class="recent-label">최근 만든 반</span>' +
+          recent.map(function (item) {
+            return '<button class="recent-chip" data-action="portal.openClass" data-code="' + esc(item.code) + '">' +
+              '<b>' + esc(item.name || item.code) + '</b><span class="mono">' + esc(item.code) + '</span></button>';
+          }).join('') + '</div>'
+        : '') +
+
+      '<div class="role-grid solo">' +
+        '<section class="role-card teacher teacher-page" id="teacher-card">' +
+          '<div class="role-head">' +
+            '<span class="role-emoji">👩‍🏫</span>' +
+            '<div><div class="role-title">선생님</div><div class="role-sub">우리 반 만들기</div></div>' +
+          '</div>' +
+          '<div class="stack">' +
+            '<label class="field">반 이름' +
+              '<input id="class-name" class="input" maxlength="20" placeholder="예: 3학년 2반" autocomplete="off">' +
+            '</label>' +
+            '<label class="field">반 코드 <span class="hint">(비워 두면 자동으로 만들어요)</span>' +
+              '<input id="class-code" class="input mono" maxlength="8" placeholder="예: 3-2BAN 또는 자동" autocomplete="off">' +
+            '</label>' +
+            '<label class="field">교사 비밀번호 (숫자 4~8자리)' +
+              '<input id="class-pin" class="input" type="password" inputmode="numeric" maxlength="8" placeholder="예: 2451" autocomplete="new-password">' +
+            '</label>' +
+            '<label class="field">교사 개설 암호' +
+              '<input id="teacher-create-code" class="input" type="password" maxlength="30" placeholder="학교에서 안내받은 암호" autocomplete="off">' +
+            '</label>' +
+            '<p class="hint">교사 개설 암호를 아는 선생님만 새 반을 만들 수 있어요. (기본 암호: <b>easy</b>)</p>' +
+            '<p class="hint">교사 비밀번호는 이 반의 <b>교사 관전·방 초기화</b>에 쓰입니다. 잊지 않게 기억해 주세요.</p>' +
+            '<button class="btn btn-primary btn-block role-submit" data-action="portal.createClass">' +
+              '우리 반 만들기 →</button>' +
+          '</div>' +
+        '</section>' +
+      '</div>' +
+
+      '<div class="portal-foot">' +
+        '<span>학생에게는 반 코드나 링크만 알려 주세요.</span>' +
+        '<span class="spacer"></span>' +
+        '<a class="foot-link" href="#/">학생 입장 화면으로</a>' +
+      '</div>';
+
+    BG.ui.screen(html, 'teacher');
   }
 
   /* ---------------- 우리 반 게임 포털 ---------------- */
@@ -205,9 +238,15 @@
       '<div class="game-emoji">' + game.emoji + '</div>' +
       '<div class="game-name">' + esc(game.title) + '</div>' +
       '<div class="game-desc">' + esc(game.desc) + '</div>' +
-      (playable && BG.cards
+      (playable && BG.cards && game.id === 'halligalli'
         ? '<div class="hero-fruits" style="justify-content:flex-start;margin-top:-2px" aria-hidden="true">' +
             ['strawberry', 'banana', 'lime', 'plum'].map(function (id) { return BG.cards.fruitIcon(id); }).join('') +
+          '</div>'
+        : '') +
+      (playable && game.id === 'bluemarble'
+        ? '<div class="game-deco bm-deco" aria-hidden="true">' +
+            '<span class="bm-deco-die">🎲</span><span class="bm-deco-tiles"><i></i><i></i><i></i><i></i></span>' +
+            '<span class="bm-deco-3d">3D</span>' +
           '</div>'
         : '') +
       '<div class="game-foot">' +
@@ -246,6 +285,7 @@
           '<div class="row class-actions">' +
             '<button class="btn btn-sm" data-action="portal.copyClassLink">🔗 링크 복사</button>' +
             '<a class="btn btn-sm btn-gold" href="#/halligalli/teacher">👩‍🏫 선생님 모드</a>' +
+            '<a class="btn btn-sm" href="#/bluemarble/teacher">🎲 부루마블 관전</a>' +
             '<button class="btn btn-sm btn-ghost" data-action="portal.changeClass">다른 반</button>' +
           '</div>' +
         '</div>' +
@@ -269,8 +309,8 @@
                 BG.avatars.html({ number: BG.state.number, name: BG.state.number + '번' }, 'sm') +
                 '<b>' + esc(BG.state.number) + '번</b><span class="spacer"></span>' +
                 (BG.hg && BG.hg.myRecordLine ? BG.hg.myRecordLine() : '') + '</div>' +
-              '<p class="hint" style="margin-top:10px">할리갈리에서 번호를 바꾸면 그 번호의 기록으로 보여요.</p>'
-            : '<p class="hint">할리갈리에 들어가 <b>출석번호</b>를 넣으면 내 승수·포인트가 여기에 쌓여요.</p>') +
+              '<p class="hint" style="margin-top:10px">게임에서 번호를 바꾸면 그 번호의 기록으로 보여요.</p>'
+            : '<p class="hint">게임에 들어가 <b>출석번호</b>를 넣으면 내 승수·포인트가 여기에 쌓여요.</p>') +
           '<p class="hint" style="margin-top:8px">승수·포인트는 이 기기에도 저장되어, 서버가 다시 켜져도 내 기록은 남아 있어요.</p>' +
         '</section>' +
       '</div>' +
@@ -278,7 +318,7 @@
       '<section class="panel" style="margin-top:22px">' +
         '<div class="panel-title">🎮 입장 방법</div>' +
         '<ol class="rules-list">' +
-          '<li>할리갈리를 고르고 <b>출석번호(1~99)</b>를 입력합니다.</li>' +
+          '<li>원하는 게임(할리갈리 · 부루마블)을 고르고 <b>출석번호(1~99)</b>를 입력합니다.</li>' +
           '<li>자기 <b>모둠(1~6모둠)</b>을 누르면 바로 그 모둠 방으로 들어가요.</li>' +
           '<li>모둠원이 모이면 방장이 <b>게임 시작</b>을 누릅니다.</li>' +
         '</ol>' +
@@ -308,6 +348,7 @@
     if (code !== BG.state.classCode) {
       // 다른 반으로 옮기면 이전 반의 랭킹이 잠깐 보이지 않게 비웁니다.
       if (BG.hg) BG.hg.state.stats = [];
+      if (BG.bm) BG.bm.state.stats = [];
       BG.setClass(code, '');
     }
     BG.state.number = BG.numberFor(code);
@@ -319,7 +360,9 @@
   BG.portal = {
     renderLanding: renderLanding,
     renderClass: renderClass,
+    renderTeacher: teacherHtml,
     landingHtml: landingHtml,
+    teacherHtml: teacherHtml,
     classPortalHtml: classPortalHtml
   };
 
@@ -342,10 +385,17 @@
     const nameEl = document.getElementById('class-name');
     const codeEl = document.getElementById('class-code');
     const pinEl = document.getElementById('class-pin');
+    const teacherEl = document.getElementById('teacher-create-code');
     const name = nameEl ? nameEl.value.trim() : '';
     const pin = pinEl ? String(pinEl.value || '').replace(/[^0-9]/g, '') : '';
     const code = BG.cleanClassCode(codeEl ? codeEl.value : '');
+    const teacherCode = teacherEl ? String(teacherEl.value || '').trim() : '';
 
+    if (teacherEl && !teacherCode) {
+      BG.ui.toast('교사 개설 암호를 입력해 주세요.', 'error');
+      teacherEl.focus();
+      return;
+    }
     if (!name) {
       BG.ui.toast('반 이름을 입력해 주세요. (예: 3학년 2반)', 'error');
       if (nameEl) nameEl.focus();
@@ -362,7 +412,7 @@
       return;
     }
     if (!needServer()) return;
-    BG.net.send({ t: 'classCreate', name: name, code: code || undefined, pin: pin });
+    BG.net.send({ t: 'classCreate', name: name, code: code || undefined, pin: pin, teacherCode: teacherCode });
   };
 
   const S = { pendingClass: '' };
@@ -409,6 +459,7 @@
 
   BG.actions['portal.changeClass'] = function () {
     if (BG.hg) BG.hg.state.stats = [];
+    if (BG.bm) BG.bm.state.stats = [];
     BG.setClass('', '');
     BG.navigate('/');
   };
@@ -497,8 +548,8 @@
       );
       return;
     }
-    if (msg.code === 'class_exists' || msg.code === 'bad_pin' || msg.code === 'bad_class_code') {
-      if (document.body.dataset.screen === 'portal') BG.ui.toast(msg.message, 'error');
+    if (msg.code === 'class_exists' || msg.code === 'bad_pin' || msg.code === 'bad_class_code' || msg.code === 'bad_teacher_code') {
+      if (document.body.dataset.screen === 'portal' || document.body.dataset.screen === 'teacher') BG.ui.toast(msg.message, 'error');
     }
   });
 
@@ -506,6 +557,11 @@
 
   BG.router.add(/^\/$/, 'portal', function () {
     renderLanding();
+  });
+
+  BG.router.add(/^\/teacher$/, 'teacher', function () {
+    teacherHtml();
+    BG.net.connect();
   });
 
   BG.router.add(/^\/class\/([A-Za-z0-9]{4,8})$/, 'class', function (params) {

@@ -61,7 +61,7 @@ async function boot(options) {
 async function newClass(env, client, spec) {
   const c = client || await connect(env.ws);
   await c.next('welcome');
-  c.send({ t: 'classCreate', name: spec.name || '테스트 반', pin: spec.pin || '2451', code: spec.code });
+  c.send({ t: 'classCreate', teacherCode: 'easy', name: spec.name || '테스트 반', pin: spec.pin || '2451', code: spec.code });
   const created = await c.next('class_created');
   return { client: c, created: created, code: created.code };
 }
@@ -75,12 +75,33 @@ function roomMsg(code, classCode) {
 
 /* ---------------- 반 만들기 ---------------- */
 
+test('교사 개설 암호가 맞지 않으면 반을 만들지 않는다', async function () {
+  const env = await boot();
+  const c = await connect(env.ws);
+  try {
+    await c.next('welcome');
+    c.send({ t: 'classCreate', teacherCode: 'wrong-code', name: '몰래 만든 반', pin: '2451' });
+    const err = await c.next('error');
+    assert.equal(err.code, 'bad_teacher_code');
+    assert.match(err.message, /개설 암호/);
+    assert.equal(env.hub.classes.size, 1, '기본 연습 교실 외에는 만들어지지 않는다');
+
+    // 암호를 아예 보내지 않아도 만들 수 없다
+    c.send({ t: 'classCreate', name: '암호 없는 반', pin: '2451' });
+    const err2 = await c.next('error');
+    assert.equal(err2.code, 'bad_teacher_code');
+  } finally {
+    c.close();
+    await env.hub.close();
+  }
+});
+
 test('반 만들기: 반 코드·전용 링크를 발급하고 PIN은 해시로만 저장한다', async function () {
   const env = await boot();
   const c = await connect(env.ws);
   try {
     await c.next('welcome');
-    c.send({ t: 'classCreate', name: '3학년 2반', pin: '2451' });
+    c.send({ t: 'classCreate', teacherCode: 'easy', name: '3학년 2반', pin: '2451' });
     const created = await c.next('class_created');
     assert.equal(created.name, '3학년 2반');
     assert.match(created.code, /^[A-Z0-9]{5}$/);
@@ -95,7 +116,7 @@ test('반 만들기: 반 코드·전용 링크를 발급하고 PIN은 해시로�
     // 그 반에는 1~6모둠 방이 따로 열린다
     c.send({ t: 'overview', gameId: 'halligalli', classCode: created.code });
     const rooms = await c.next(function (m) {
-      return m.t === 'rooms' && m.classCode === created.code;
+      return m.t === 'rooms' && m.classCode === created.code && m.gameId === 'halligalli';
     });
     assert.deepEqual(rooms.rooms.map(function (r) { return r.code; }), ['1', '2', '3', '4', '5', '6']);
     assert.ok(rooms.rooms.every(function (r) { return r.classCode === created.code; }));
@@ -111,7 +132,7 @@ test('반 만들기: 반 코드·전용 링크를 발급하고 PIN은 해시로�
     // 같은 코드로 또 만들 수 없다
     const other = await connect(env.ws);
     await other.next('welcome');
-    other.send({ t: 'classCreate', name: '다른 반', pin: '1111', code: created.code });
+    other.send({ t: 'classCreate', teacherCode: 'easy', name: '다른 반', pin: '1111', code: created.code });
     const denied = await other.next('error');
     assert.equal(denied.code, 'class_exists');
     other.close();
@@ -126,20 +147,20 @@ test('반 코드를 직접 정할 수 있고, 형식이 틀리면 거절한다',
   const c = await connect(env.ws);
   try {
     await c.next('welcome');
-    c.send({ t: 'classCreate', name: '5학년 1반', pin: '1234', code: '5-1ban' });
+    c.send({ t: 'classCreate', teacherCode: 'easy', name: '5학년 1반', pin: '1234', code: '5-1ban' });
     const created = await c.next('class_created');
     assert.equal(created.code, '51BAN');
 
     const bad = await connect(env.ws);
     await bad.next('welcome');
-    bad.send({ t: 'classCreate', name: 'x', pin: '1234', code: '5-1ban' });
+    bad.send({ t: 'classCreate', teacherCode: 'easy', name: 'x', pin: '1234', code: '5-1ban' });
     const err = await bad.next('error');
     assert.equal(err.code, 'class_exists', '이미 쓰는 코드(대소문자 무시)는 거절');
     bad.close();
 
     const bad2 = await connect(env.ws);
     await bad2.next('welcome');
-    bad2.send({ t: 'classCreate', name: '반', pin: '12' });
+    bad2.send({ t: 'classCreate', teacherCode: 'easy', name: '반', pin: '12' });
     const err2 = await bad2.next('error');
     assert.equal(err2.code, 'bad_pin', 'PIN은 4자리 이상 숫자');
     bad2.close();
@@ -492,7 +513,7 @@ test('서버를 다시 켜도 만든 반과 PIN이 남아 있다 (파일 저장)
   const c = await connect(first.ws);
   try {
     await c.next('welcome');
-    c.send({ t: 'classCreate', name: '이어지는 반', pin: '1357' });
+    c.send({ t: 'classCreate', teacherCode: 'easy', name: '이어지는 반', pin: '1357' });
     const created = await c.next('class_created');
     code = created.code;
   } finally {
@@ -514,7 +535,9 @@ test('서버를 다시 켜도 만든 반과 PIN이 남아 있다 (파일 저장)
 
     // 1~6모둠 방도 다시 열린다
     again.send({ t: 'overview', gameId: 'halligalli', classCode: code });
-    const rooms = await again.next(function (m) { return m.t === 'rooms' && m.classCode === code; });
+    const rooms = await again.next(function (m) {
+      return m.t === 'rooms' && m.classCode === code && m.gameId === 'halligalli';
+    });
     assert.equal(rooms.rooms.length, 6);
   } finally {
     again.close();

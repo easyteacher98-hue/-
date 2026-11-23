@@ -381,7 +381,8 @@
     const was = wasConnected;
     wasConnected = false;
     if (!was) return;
-    if (['halligalli', 'hg.room', 'hg.teacher', 'hg.watch'].indexOf(document.body.dataset.screen) !== -1) {
+    if (['halligalli', 'hg.room', 'hg.teacher', 'hg.watch',
+      'bluemarble', 'bm.room', 'bm.watch', 'bm.bot', 'bm.teacher'].indexOf(document.body.dataset.screen) !== -1) {
       BG.render();
     }
   });

@@ -72,7 +72,7 @@ test('HTTP: 첫 화면과 health, 공용 엔진 파일을 제공한다', async f
     assert.equal(health.status, 200);
     const info = await health.json();
     assert.equal(info.ok, true);
-    assert.equal(info.rooms, 6);
+    assert.equal(info.rooms, 12, '할리갈리 6 + 부루마블 6 모둠 방');
 
     const engine = await fetch(env.http + '/engine.js');
     assert.equal(engine.status, 200);
@@ -95,7 +95,7 @@ test('6개 모둠 방이 열려 있고, 입장 → 준비 → 시작 → 뒤집�
     const a = await connect(env.ws);
     clients.push(a);
     const welcome = await a.next('welcome');
-    const groups = welcome.rooms.filter(function (r) { return r.isGroup; });
+    const groups = welcome.rooms.filter(function (r) { return r.isGroup && r.gameId === 'halligalli'; });
     assert.equal(groups.length, 6);
     assert.deepEqual(groups.map(function (r) { return r.code; }), ['1', '2', '3', '4', '5', '6']);
     assert.equal(groups[0].capacity, 4);

@@ -36,6 +36,9 @@ const DEFAULT_CLASS_CODE = 'DEMO';
 const DEFAULT_CLASS_NAME = '연습 교실';
 const CLASS_STORE_VERSION = 1;
 
+/* 교사가 새 반을 만들 때 쓰는 개설 암호 (기본값 'easy', 운영에서는 TEACHER_CREATE_CODE 로 바꿉니다) */
+const TEACHER_CREATE_CODE = String(process.env.TEACHER_CREATE_CODE || 'easy');
+
 function sanitizeNickname(raw) {
   const text = String(raw === undefined || raw === null ? '' : raw)
     .replace(/[\u0000-\u001f\u007f]/g, '')
@@ -355,6 +358,7 @@ function createHub(options) {
       hostId: null,
       game: null,
       endWhenTwo: false,
+      rounds: 15,
       botTimer: null,
       lastEvent: '대기 중',
       resultRecorded: false,
@@ -467,6 +471,7 @@ function createHub(options) {
       status: game ? game.status : 'waiting',
       hostId: room.hostId,
       endWhenTwo: room.endWhenTwo,
+      rounds: room.rounds,
       youId: viewerId || null,
       role: role || 'lobby',
       youAreHost: !!viewerId && viewerId === room.hostId,
@@ -802,7 +807,7 @@ function createHub(options) {
     stopBotLoop(room);
     room.game = room.gameModule.createGame(
       room.seats.map(function (s) { return { id: s.id, name: s.name, number: s.number, isBot: s.isBot }; }),
-      { endWhenTwo: room.endWhenTwo }
+      { endWhenTwo: room.endWhenTwo, maxRounds: room.rounds }
     );
     room.finishedAt = null;
     room.resultRecorded = false;
@@ -893,6 +898,10 @@ function createHub(options) {
    * PIN은 해시로만 저장하고, 응답에 담지 않습니다.
    */
   function createClassFor(ws, msg) {
+    const providedCode = String(msg.teacherCode === undefined || msg.teacherCode === null ? '' : msg.teacherCode).trim();
+    if (providedCode !== TEACHER_CREATE_CODE) {
+      return sendError(ws, '교사 개설 암호가 맞지 않습니다. 학교에서 안내받은 암호를 입력해 주세요.', 'bad_teacher_code');
+    }
     if ((ws.meta.classCreates || 0) >= 5) {
       return sendError(ws, '한 연결에서는 반을 5개까지 만들 수 있습니다. 새로고침 후 다시 시도해 주세요.', 'too_many_classes');
     }
@@ -1130,7 +1139,11 @@ function createHub(options) {
         if (!room || !seat) return sendError(ws, '방에 입장해야 합니다.', 'no_room');
         if (seat.id !== room.hostId) return sendError(ws, '방장만 설정을 바꿀 수 있습니다.', 'not_host');
         if (room.game && room.game.status === 'playing') return sendError(ws, '게임 중에는 바꿀 수 없습니다.', 'playing');
-        room.endWhenTwo = !!msg.endWhenTwo;
+        if (msg.endWhenTwo !== undefined) room.endWhenTwo = !!msg.endWhenTwo;
+        if (msg.rounds !== undefined) {
+          const rounds = Number(msg.rounds);
+          if (Number.isInteger(rounds) && rounds >= 3 && rounds <= 30) room.rounds = rounds;
+        }
         broadcastRoom(room);
         return;
       }
@@ -1142,8 +1155,8 @@ function createHub(options) {
         if (room.game && room.game.status === 'playing') return sendError(ws, '게임 중에는 봇을 추가할 수 없습니다.', 'playing');
         if (room.seats.length >= room.capacity) return sendError(ws, '인원이 가득 찼습니다.', 'full');
         const used = new Set(room.seats.map(function (s) { return s.name; }));
-        const HG = require('./public/engine.js');
-        const botName = HG.BOT_NAMES.find(function (n) { return !used.has(n); }) || ('봇' + room.seats.length);
+        const fallbackNames = room.gameModule.botNames || require('./public/engine.js').BOT_NAMES;
+        const botName = fallbackNames.find(function (n) { return !used.has(n); }) || ('봇' + room.seats.length);
         room.seats.push({
           id: 'b' + nextId(),
           token: null,

@@ -143,6 +143,15 @@
       sound.tone(520, { type: 'triangle', duration: 0.09, gain: 0.05, slideTo: 760 });
     },
 
+    /** 주사위 굴리는 소리 (짧은 딸그락) */
+    dice() {
+      if (!sound.enabled) return;
+      [0, 0.06, 0.13, 0.2].forEach(function (delay, i) {
+        sound.tone(240 + i * 55, { type: 'square', duration: 0.045, gain: 0.03, delay: delay });
+      });
+      sound.tone(560, { type: 'triangle', duration: 0.1, gain: 0.045, delay: 0.26, slideTo: 380 });
+    },
+
     tap() {
       sound.tone(660, { type: 'sine', duration: 0.08, gain: 0.05 });
     },
