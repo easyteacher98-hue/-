@@ -692,7 +692,7 @@
     S.cardShown = card.seq;
     if (game.status === 'finished') return;
     const mine = card.playerId === view.youId;
-    if (!mine && view.mode !== 'bot' && view.role !== 'spectator') {
+    if (!mine) {
       BG.ui.toast(card.playerName + '님 황금열쇠: ' + card.title, '');
       return;
     }

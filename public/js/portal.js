@@ -160,7 +160,6 @@
           (connected ? '실시간 서버 연결됨' : '서버 연결 없음 — AI 봇 연습과 규칙은 그대로 사용할 수 있어요') + '</span>' +
         '<span class="spacer"></span>' +
         '<a class="foot-link" href="#/halligalli/bot">🤖 AI 봇 연습</a>' +
-        '<a class="foot-link" href="#/teacher">👩‍🏫 교사용</a>' +
       '</div>';
 
     BG.ui.screen(html, 'portal');
@@ -210,7 +209,7 @@
             '<label class="field">교사 개설 암호' +
               '<input id="teacher-create-code" class="input" type="password" maxlength="30" placeholder="학교에서 안내받은 암호" autocomplete="off">' +
             '</label>' +
-            '<p class="hint">교사 개설 암호를 아는 선생님만 새 반을 만들 수 있어요. (기본 암호: <b>easy</b>)</p>' +
+            '<p class="hint">교사 개설 암호를 아는 선생님만 새 반을 만들 수 있어요. 학교 관리자(또는 서버를 설치한 선생님)에게 안내받은 암호를 넣어 주세요.</p>' +
             '<p class="hint">교사 비밀번호는 이 반의 <b>교사 관전·방 초기화</b>에 쓰입니다. 잊지 않게 기억해 주세요.</p>' +
             '<button class="btn btn-primary btn-block role-submit" data-action="portal.createClass">' +
               '우리 반 만들기 →</button>' +
