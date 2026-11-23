@@ -750,7 +750,6 @@ body, p, li, td, .page-sub, .hint, .game-desc, .tool-desc, .seat-sub, .tile-foot
 }
 .tile-card { display: grid; place-items: center; }
 .tile-foot { font-size: 10.5px; font-weight: 900; color: var(--coral-dark); text-align: center; min-height: 13px; }
-.tile.is-self .tile-name::after { content: ' (나)'; color: var(--coral); font-size: 9.5px; }
 
 /* ---------- 종 ---------- */
 
