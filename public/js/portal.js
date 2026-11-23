@@ -305,7 +305,12 @@
       BG.navigate('/');
       return;
     }
-    if (code !== BG.state.classCode) BG.setClass(code, '');
+    if (code !== BG.state.classCode) {
+      // 다른 반으로 옮기면 이전 반의 랭킹이 잠깐 보이지 않게 비웁니다.
+      if (BG.hg) BG.hg.state.stats = [];
+      BG.setClass(code, '');
+    }
+    BG.state.number = BG.numberFor(code);
     classPortalHtml();
     BG.net.connect();
     if (BG.net.connected) BG.net.send({ t: 'classEnter', code: code });
@@ -403,6 +408,7 @@
   };
 
   BG.actions['portal.changeClass'] = function () {
+    if (BG.hg) BG.hg.state.stats = [];
     BG.setClass('', '');
     BG.navigate('/');
   };
@@ -431,7 +437,9 @@
 
   BG.net.on('class_created', function (msg) {
     const cls = msg.class || { code: msg.code, name: msg.name };
+    if (BG.hg) BG.hg.state.stats = [];
     BG.setClass(cls.code, cls.name);
+    BG.state.number = BG.numberFor(cls.code);
     BG.rememberClass(cls);
     if (msg.teacherToken) BG.setTeacherToken(cls.code, msg.teacherToken);
     createdModal({ code: cls.code, name: cls.name, link: msg.link });
