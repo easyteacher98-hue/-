@@ -85,7 +85,9 @@
   };
 
   BG.className = function () {
-    return BG.state.className || (BG.state.classCode ? BG.state.classCode + ' 반' : '');
+    if (BG.state.className) return BG.state.className;
+    if (!BG.state.classCode) return '';
+    return BG.state.classCode === 'DEMO' ? '연습 교실' : BG.state.classCode + ' 반';
   };
 
   BG.classLink = function (code) {

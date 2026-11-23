@@ -257,7 +257,7 @@
             '<a href="#/halligalli/bot">🤖 AI 봇 연습</a>은 그대로 됩니다. (선생님은 서버가 켜진 주소로 접속해 주세요.)</div>'
         : '') +
 
-      '<h2 class="panel-title" style="margin:2px 0 12px">게임 선택</h2>' +
+      '<h2 class="panel-title" style="margin:18px 0 12px">게임 선택</h2>' +
       '<div class="game-grid">' + games + '</div>' +
 
       '<div class="class-lower">' +
