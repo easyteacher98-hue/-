@@ -116,9 +116,9 @@
     ctx.fillStyle = '#fffdf7';
     ctx.fillRect(0, 0, S, S);
     const grad = ctx.createLinearGradient(0, 0, 0, S);
-    grad.addColorStop(0, tint(baseColor, 0.72));
-    grad.addColorStop(0.62, '#fffdf7');
-    grad.addColorStop(1, '#fff8ee');
+    grad.addColorStop(0, tint(baseColor, 0.62));
+    grad.addColorStop(0.62, '#fffaf0');
+    grad.addColorStop(1, '#fff4e2');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, S, S);
 
@@ -221,9 +221,9 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     const grad = ctx.createRadialGradient(S / 2, S / 2, 40, S / 2, S / 2, S * 0.72);
-    grad.addColorStop(0, '#f2fbf3');
-    grad.addColorStop(0.62, '#e4f3e2');
-    grad.addColorStop(1, '#cfe7d4');
+    grad.addColorStop(0, '#e8f7e6');
+    grad.addColorStop(0.62, '#cfeacb');
+    grad.addColorStop(1, '#aed6b4');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, S, S);
 
@@ -341,8 +341,8 @@
       this.disposed = false;
 
       this.theta = 0;
-      this.phi = 0.74;
-      this.radius = 17;
+      this.phi = 0.80;
+      this.radius = 11.8;
 
       this.scene = new THREE.Scene();
       this.scene.fog = new THREE.Fog(0xfdf1e3, 28, 48);
@@ -389,9 +389,9 @@
 
     buildLights() {
       const THREE = this.THREE;
-      const hemi = new THREE.HemisphereLight(0xffffff, 0xcbb79c, 0.95);
+      const hemi = new THREE.HemisphereLight(0xffffff, 0xb99f80, 0.62);
       this.scene.add(hemi);
-      const sun = new THREE.DirectionalLight(0xfff2dd, 1.0);
+      const sun = new THREE.DirectionalLight(0xfff0d6, 0.85);
       sun.position.set(9, 16, 10);
       sun.castShadow = true;
       sun.shadow.mapSize.set(1024, 1024);
@@ -403,7 +403,7 @@
       sun.shadow.camera.far = 40;
       sun.shadow.bias = -0.0008;
       this.scene.add(sun);
-      const fill = new THREE.DirectionalLight(0xdceaff, 0.35);
+      const fill = new THREE.DirectionalLight(0xdceaff, 0.22);
       fill.position.set(-8, 7, -6);
       this.scene.add(fill);
     }
@@ -412,13 +412,13 @@
 
     buildBoard() {
       const THREE = this.THREE;
-      const baseMat = new THREE.MeshLambertMaterial({ color: 0xf3e3cb });
+      const baseMat = new THREE.MeshLambertMaterial({ color: 0xe8c9a0 });
       const base = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.55, 8.6), baseMat);
       base.position.y = -0.5;
       base.receiveShadow = true;
       this.scene.add(base);
 
-      const edgeMat = new THREE.MeshLambertMaterial({ color: 0xe3caa9 });
+      const edgeMat = new THREE.MeshLambertMaterial({ color: 0xc9a271 });
       const edge = new THREE.Mesh(new THREE.BoxGeometry(8.9, 0.22, 8.9), edgeMat);
       edge.position.y = -0.82;
       this.scene.add(edge);
@@ -440,7 +440,7 @@
         const group = new THREE.Group();
         group.position.set(pos.x, -0.07, pos.z);
 
-        const sideMat = new THREE.MeshLambertMaterial({ color: 0xf0e0c9 });
+        const sideMat = new THREE.MeshLambertMaterial({ color: 0xf0dcc0 });
         const topTexture = drawTileTexture(tile, i, null, 0, pos.side);
         const topMat = topTexture
           ? new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(topTexture) })
@@ -460,19 +460,7 @@
         if (topMat.map) this.tileTextureKeys[i] = '';
       }
 
-      // 보드 위 작은 구름 장식 (분위기)
-      const scene = this.scene;
-      const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 });
-      [[-5.6, 1.5, -5.2], [5.8, 1.9, 5.0], [5.6, 1.4, -5.4]].forEach(function (c) {
-        const cloud = new THREE.Group();
-        [[0, 0, 0, 0.55], [0.4, 0.06, 0.1, 0.4], [-0.4, 0.02, -0.1, 0.36]].forEach(function (s) {
-          const ball = new THREE.Mesh(new THREE.SphereGeometry(s[3], 12, 10), cloudMat);
-          ball.position.set(s[0], s[1], s[2]);
-          cloud.add(ball);
-        });
-        cloud.position.set(c[0], c[1], c[2]);
-        scene.add(cloud);
-      });
+      // 보드 위 작은 구름 장식은 두지 않습니다. (보드가 작게 보이거나 가려지지 않도록)
     }
 
     /* ----- 주사위 ----- */
@@ -485,13 +473,13 @@
       const mats = textures.map(function (tex) { return new THREE.MeshLambertMaterial({ map: tex }); });
 
       const makeDie = function (x) {
-        const die = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), mats);
+        const die = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.78, 0.78), mats);
         die.castShadow = true;
         die.receiveShadow = true;
-        die.position.set(x, 0.52, 0.65);
+        die.position.set(x, 0.55, 1.15);
         return die;
       };
-      this.dice = { a: makeDie(-0.5), b: makeDie(0.5), anim: null };
+      this.dice = { a: makeDie(-0.55), b: makeDie(0.55), anim: null };
       this.scene.add(this.dice.a);
       this.scene.add(this.dice.b);
       this.dice.a.rotation.set(0.1, 0.2, 0);
@@ -922,8 +910,8 @@
 
     resetCamera() {
       this.theta = 0;
-      this.phi = 0.74;
-      this.radius = 17;
+      this.phi = 0.80;
+      this.radius = 11.8;
       this.updateCamera();
     }
 
@@ -962,7 +950,7 @@
       canvas.addEventListener('pointerleave', end);
       canvas.addEventListener('wheel', function (e) {
         e.preventDefault();
-        self.radius = Math.max(10, Math.min(26, self.radius + e.deltaY * 0.012));
+        self.radius = Math.max(7.5, Math.min(21, self.radius + e.deltaY * 0.012));
         self.updateCamera();
       }, { passive: false });
       canvas.addEventListener('touchstart', function (e) {
@@ -973,7 +961,7 @@
       canvas.addEventListener('touchmove', function (e) {
         if (e.touches.length === 2 && pinch) {
           const next = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-          self.radius = Math.max(10, Math.min(26, self.radius - (next - pinch) * 0.03));
+          self.radius = Math.max(7.5, Math.min(21, self.radius - (next - pinch) * 0.03));
           self.updateCamera();
           pinch = next;
           e.preventDefault();
