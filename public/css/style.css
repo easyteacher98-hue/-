@@ -413,6 +413,7 @@ body, p, li, td, .page-sub, .hint, .game-desc, .tool-desc, .seat-sub, .tile-foot
 }
 .game-card.playable:hover { transform: translateY(-5px) rotate(-0.4deg); box-shadow: var(--shadow); }
 .game-card.coming { background: linear-gradient(180deg, #fffdf8, #f8f2e8); }
+.game-card > .badge { align-self: flex-start; }
 .game-emoji {
   font-size: 40px;
   line-height: 1;
@@ -518,11 +519,12 @@ body, p, li, td, .page-sub, .hint, .game-desc, .tool-desc, .seat-sub, .tile-foot
 .tool-title { display: block; font-weight: 900; font-size: 15px; line-height: 1.35; }
 .tool-desc { display: block; font-size: 12px; color: var(--muted); line-height: 1.5; font-weight: 600; margin: 0; }
 
-.group-grid {
+.group-grid { 
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(174px, 1fr));
   gap: 13px;
 }
+.group-grid > .empty { grid-column: 1 / -1; }
 
 .group-card {
   --group-tint: #eaf7ef;
@@ -705,7 +707,7 @@ body, p, li, td, .page-sub, .hint, .game-desc, .tool-desc, .seat-sub, .tile-foot
 }
 
 .tile {
-  width: 122px;
+  width: 134px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -731,7 +733,7 @@ body, p, li, td, .page-sub, .hint, .game-desc, .tool-desc, .seat-sub, .tile-foot
 .tile-name {
   font-size: 12px;
   font-weight: 900;
-  max-width: 56px;
+  max-width: 64px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1316,9 +1318,9 @@ body, p, li, td, .page-sub, .hint, .game-desc, .tool-desc, .seat-sub, .tile-foot
   .room-name { font-size: 20px; }
   .panel { padding: 16px; border-radius: 20px; }
   .table { gap: 8px; padding: 13px 9px; border-radius: 22px; }
-  .tile { width: 96px; padding: 7px; border-radius: 15px; }
+  .tile { width: 100px; padding: 7px; border-radius: 15px; }
   .tile-person .avatar.xs { width: 18px; height: 18px; }
-  .tile-name { max-width: 42px; font-size: 11px; }
+  .tile-name { max-width: 44px; font-size: 11px; }
   .tile-cards { font-size: 9.5px; padding: 1px 5px; }
   .bell-slot { width: 98px; }
   .bell { width: 88px; height: 88px; border-width: 2.5px; }

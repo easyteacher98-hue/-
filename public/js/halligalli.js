@@ -363,7 +363,7 @@
       '<div class="tile ' + (player.isTurn && !player.eliminated ? 'is-turn ' : '') + (isSelf ? 'is-self ' : '') + (player.eliminated ? 'is-out' : '') + '">' +
         '<div class="tile-top">' +
           '<span class="tile-person">' + avatar(player, 'xs') +
-            '<span class="tile-name" title="' + esc(player.name) + '">' + esc(player.name) + (player.isBot ? ' 🤖' : '') + '</span>' +
+            '<span class="tile-name" title="' + esc(player.name) + (player.isBot ? ' (AI 봇)' : '') + '">' + esc(player.name) + '</span>' +
           '</span>' +
           '<span class="tile-cards">' + player.totalCards + '장</span>' +
         '</div>' +
@@ -536,8 +536,7 @@
       '<div class="screen-head">' +
         '<div>' +
           '<a class="back-link" href="' + backHref + '">← ' + backLabel + '</a>' +
-          '<h1 class="room-name">' + esc(view.title) + ' ' +
-            (view.mode === 'bot' ? '<span class="badge playing">연습</span>' : statusBadge(game.status)) + '</h1>' +
+          '<h1 class="room-name">' + esc(view.title) + ' ' + statusBadge(game.status) + '</h1>' +
           '<p class="page-sub">' + esc(subtitle) + '</p>' +
         '</div>' +
         tools +
