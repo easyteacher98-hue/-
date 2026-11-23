@@ -533,6 +533,12 @@
     return '<div class="turn-banner">' + (role === 'spectator' ? '👀 관전 중 · ' : '') + esc(name) + '님 차례</div>';
   }
 
+  /** 우승자 좌석(번호 아바타 일관성을 위해 player 객체를 찾습니다) */
+  function winnerPlayer(game) {
+    if (!game || !game.players) return null;
+    return game.players.find(function (p) { return p.id === game.winnerId || p.name === game.winner; }) || null;
+  }
+
   function winnerOverlay(game, opts) {
     if (game.status !== 'finished') return '';
     const buttons = [];
@@ -551,7 +557,7 @@
       '<div class="winner-overlay">' +
         '<div class="winner-card">' +
           '<div class="winner-crown">🏆</div>' +
-          (game.winner ? avatar(game.winner, 'lg') : '') +
+          (game.winner ? avatar(winnerPlayer(game) || game.winner, 'lg') : '') +
           '<div class="winner-title">' + esc(game.winner || '게임') + ' 우승!</div>' +
           '<p class="winner-sub">' + (game.status === 'finished' ? '수고했어요! 다음 판도 도전해 볼까요?' : '') + '</p>' +
           '<div class="stack">' + buttons.join('') + '</div>' +
@@ -911,7 +917,7 @@
     } else {
       list = (room.players || []).map(function (p) {
         return '<div class="room-player ' + (p.isTurn ? 'turn' : '') + ' ' + (p.eliminated ? 'out' : '') + '">' +
-          avatar({ name: p.name, id: p.id }, 'xs') +
+          avatar({ number: p.number, name: p.name, id: p.id }, 'xs') +
           '<span class="who">' + (p.isTurn ? '▶ ' : '') + esc(p.name) + (p.isBot ? ' 🤖' : '') + '</span>' +
           '<span class="cnt">' + p.deckCount + '장</span></div>';
       }).join('');
