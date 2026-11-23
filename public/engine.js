@@ -1,5 +1,5 @@
 /*
- * 할리갈리 게임 엔진 (공용)
+ * 과일 딩동 게임 엔진 (공용)
  * - Node.js(require)와 브라우저(window.HalliGalli) 양쪽에서 동작하는 UMD 모듈입니다.
  * - 서버(멀티플레이 방)와 브라우저(AI 봇 대전)가 같은 규칙 코드를 사용합니다.
  */
@@ -92,10 +92,10 @@
     constructor(players, options) {
       const opts = options || {};
       if (!Array.isArray(players) || players.length < MIN_PLAYERS) {
-        throw new Error('할리갈리는 최소 ' + MIN_PLAYERS + '명이 필요합니다.');
+        throw new Error('과일 딩동는 최소 ' + MIN_PLAYERS + '명이 필요합니다.');
       }
       if (players.length > MAX_PLAYERS) {
-        throw new Error('할리갈리는 최대 ' + MAX_PLAYERS + '명까지 참여할 수 있습니다.');
+        throw new Error('과일 딩동는 최대 ' + MAX_PLAYERS + '명까지 참여할 수 있습니다.');
       }
       this.rng = opts.rng || Math.random;
       this.endWhenTwo = !!opts.endWhenTwo;

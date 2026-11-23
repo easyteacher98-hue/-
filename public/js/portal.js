@@ -13,7 +13,7 @@
   BG.portalGames = [
     {
       id: 'halligalli',
-      title: '할리갈리',
+      title: '과일 딩동',
       emoji: '🔔',
       desc: '딸기·바나나·라임·자두, 같은 과일이 정확히 5개가 되는 순간 종을 치세요. 6개 모둠이 각자 방에서 동시에 즐깁니다.',
       players: '2~5명 · 모둠당 4명',
@@ -23,7 +23,7 @@
     },
     {
       id: 'bluemarble',
-      title: '부루마블 (3D)',
+      title: '세계여행 마블 (3D)',
       emoji: '🎲',
       desc: '주사위를 굴려 도시를 사고, 별장·빌딩·호텔을 세워 통행료를 받는 3D 보드게임. 드래그로 보드를 돌려 보세요.',
       players: '2~4명 · 모둠당 4명',
@@ -285,7 +285,7 @@
           '<div class="row class-actions">' +
             '<button class="btn btn-sm" data-action="portal.copyClassLink">🔗 링크 복사</button>' +
             '<a class="btn btn-sm btn-gold" href="#/halligalli/teacher">👩‍🏫 선생님 모드</a>' +
-            '<a class="btn btn-sm" href="#/bluemarble/teacher">🎲 부루마블 관전</a>' +
+            '<a class="btn btn-sm" href="#/bluemarble/teacher">🎲 세계여행 마블 관전</a>' +
             '<button class="btn btn-sm btn-ghost" data-action="portal.changeClass">다른 반</button>' +
           '</div>' +
         '</div>' +
@@ -318,7 +318,7 @@
       '<section class="panel" style="margin-top:22px">' +
         '<div class="panel-title">🎮 입장 방법</div>' +
         '<ol class="rules-list">' +
-          '<li>원하는 게임(할리갈리 · 부루마블)을 고르고 <b>출석번호(1~99)</b>를 입력합니다.</li>' +
+          '<li>원하는 게임(과일 딩동 · 세계여행 마블)을 고르고 <b>출석번호(1~99)</b>를 입력합니다.</li>' +
           '<li>자기 <b>모둠(1~6모둠)</b>을 누르면 바로 그 모둠 방으로 들어가요.</li>' +
           '<li>모둠원이 모이면 방장이 <b>게임 시작</b>을 누릅니다.</li>' +
         '</ol>' +

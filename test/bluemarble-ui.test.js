@@ -97,7 +97,7 @@ function createClass(env, name, pin) {
 
 /* ---------------- 우리 반 포털 ---------------- */
 
-test('우리 반 포털에 부루마블 (3D) 카드가 플레이 가능으로 보인다', async function () {
+test('우리 반 포털에 세계여행 마블 (3D) 카드가 플레이 가능으로 보인다', async function () {
   const env = await boot();
   const code = await createClass(env, '3학년 2반', '2451');
   const dom = await openPage(env.base + '/?class=' + code);
@@ -107,12 +107,12 @@ test('우리 반 포털에 부루마블 (3D) 카드가 플레이 가능으로 �
     const cards = window.document.querySelectorAll('.game-card');
     assert.ok(cards.length >= 2);
     const bm = window.document.querySelector('.game-card[href="#/bluemarble"]');
-    assert.ok(bm, '부루마블 카드');
-    assert.match(bm.textContent, /부루마블/);
+    assert.ok(bm, '세계여행 마블 카드');
+    assert.match(bm.textContent, /세계여행 마블/);
     assert.match(bm.textContent, /3D/);
     assert.ok(bm.querySelector('.badge.ready'), '플레이 가능 배지');
     assert.ok(bm.querySelector('.bm-deco'), '3D 장식');
-    assert.ok(window.document.querySelector('.game-card[href="#/halligalli"]'), '할리갈리 카드도 그대로');
+    assert.ok(window.document.querySelector('.game-card[href="#/halligalli"]'), '과일 딩동 카드도 그대로');
   } finally {
     window.close();
     await env.hub.close();
@@ -132,7 +132,7 @@ test('번호로 모둠 방에 입장하고, 봇을 추가해 시작하면 2D 대
     await waitFor(function () { return window.document.querySelector('#number'); }, '출석번호 입력');
     await waitFor(function () { return window.BG.net.connected; }, '서버 연결');
 
-    assert.match(window.document.body.textContent, /부루마블/);
+    assert.match(window.document.body.textContent, /세계여행 마블/);
     assert.match(window.document.body.textContent, /더블 = 한 번 더/);
     assert.equal(window.document.querySelectorAll('.group-card').length, 6, '1~6모둠 방');
     assert.ok(window.document.querySelector('[data-action="bm.rules"]'), '규칙 버튼');
@@ -191,7 +191,7 @@ test('번호로 모둠 방에 입장하고, 봇을 추가해 시작하면 2D 대
     // 규칙 팝업
     click(window, '[data-action="bm.rules"]');
     await waitFor(function () { return window.document.querySelector('.modal'); }, '규칙 팝업');
-    assert.match(window.document.querySelector('.modal').textContent, /부루마블 규칙/);
+    assert.match(window.document.querySelector('.modal').textContent, /세계여행 마블 규칙/);
     assert.match(window.document.querySelector('.modal').textContent, /황금열쇠/);
     assert.ok(window.document.querySelectorAll('.bm-rule-tile').length === 28, '보드 28칸 안내');
     click(window, '.modal [data-action="ui.closeModal"]');

@@ -1,5 +1,5 @@
 /*
- * 부루마블 (3D) 화면
+ * 세계여행 마블 (3D) 화면
  * 입장 · 대기방 · 3D 게임판 · 교사 관전 · AI 봇 연습
  * 규칙 계산은 public/bluemarble-engine.js, 3D 연출은 public/js/bluemarble3d.js 가 맡습니다.
  */
@@ -125,7 +125,7 @@
     }).join('');
 
     return (
-      '<h2>🎲 부루마블 규칙</h2>' +
+      '<h2>🎲 세계여행 마블 규칙</h2>' +
       '<p>주사위를 굴려 도시를 사고, <b>별장 → 빌딩 → 호텔</b>로 건물을 세워 통행료를 받는 게임입니다.</p>' +
       '<ol class="rules-list">' +
         '<li>순서대로 <b>주사위 2개</b>를 굴려 나온 합만큼 말을 옮깁니다.</li>' +
@@ -228,7 +228,7 @@
       '</div>' +
       '<div class="screen-head">' +
         '<div>' +
-          '<h1 class="entry-title">🎲 부루마블 <span class="bm-3d-chip">3D</span></h1>' +
+          '<h1 class="entry-title">🎲 세계여행 마블 <span class="bm-3d-chip">3D</span></h1>' +
           '<p class="page-sub">주사위를 굴려 도시를 사고, 별장·빌딩·호텔을 세워 통행료를 받으세요!</p>' +
         '</div>' +
         '<button class="btn btn-ghost btn-sm" data-action="bm.rules">📖 게임 규칙</button>' +
@@ -421,7 +421,7 @@
     return (
       '<div class="bm2d">' + cells +
         '<div class="bm2d-center">' +
-          '<div class="bm2d-logo">부루마블</div>' +
+          '<div class="bm2d-logo">세계여행 마블</div>' +
           '<div class="bm2d-sub">3D 보드를 표시할 수 없어 2D로 보여 드려요</div>' +
           '<div class="bm2d-dice">' + (roll ? '🎲 ' + roll.a + ' + ' + roll.b + ' = <b>' + roll.sum + '</b>' : '🎲') + '</div>' +
           '<div class="bm2d-turn">' + (game.status === 'playing'
@@ -623,7 +623,7 @@
     disposeBoard();
     S.fallback = false;
     if (BG.bm3d) {
-      S.board = BG.bm3d.mount(container, { title: '부루마블' });
+      S.board = BG.bm3d.mount(container, { title: '세계여행 마블' });
     }
     if (!S.board) {
       S.fallback = true;
@@ -995,7 +995,7 @@
         '<div class="gate-emoji">👩‍🏫</div>' +
         '<h1 class="page-title">' + esc(BG.className() || BG.state.classCode) + ' 선생님 확인</h1>' +
         '<p class="page-sub">우리 반을 만들 때 정한 <b>교사 비밀번호(PIN)</b>를 입력하면<br>' +
-          '부루마블 6개 모둠을 관전하고 방을 초기화할 수 있어요.</p>' +
+          '세계여행 마블 6개 모둠을 관전하고 방을 초기화할 수 있어요.</p>' +
         '<div class="gate-form">' +
           '<input id="teacher-pin" class="input pin-input" type="password" inputmode="numeric" maxlength="8" ' +
             'autocomplete="current-password" placeholder="교사 PIN">' +
@@ -1029,7 +1029,7 @@
       '<div class="screen-head">' +
         '<div>' +
           '<a class="back-link" href="#/class/' + esc(BG.state.classCode) + '">← ' + esc(BG.className() || '우리 반') + '</a>' +
-          '<h1 class="page-title">👩‍🏫 교사 관전 · 부루마블 (3D)</h1>' +
+          '<h1 class="page-title">👩‍🏫 교사 관전 · 세계여행 마블 (3D)</h1>' +
           '<p class="page-sub">' + esc(BG.className() || BG.state.classCode) + ' 6개 모둠의 3D 보드를 실시간으로 확인합니다.</p>' +
         '</div>' +
         '<div class="row">' +
@@ -1133,8 +1133,8 @@
       BG.ui.screen(
         '<div class="screen-head">' +
           '<div>' +
-            '<a class="back-link" href="#/bluemarble">← 부루마블 입장</a>' +
-            '<h1 class="page-title">🤖 AI 봇과 부루마블 연습</h1>' +
+            '<a class="back-link" href="#/bluemarble">← 세계여행 마블 입장</a>' +
+            '<h1 class="page-title">🤖 AI 봇과 세계여행 마블 연습</h1>' +
             '<p class="page-sub">서버에 접속하지 않아도 3D 보드로 바로 연습할 수 있습니다. (내 번호: ' + esc(myLabel()) + ')</p>' +
           '</div>' +
           '<button class="btn btn-sm" data-action="bm.rules">📖 규칙</button>' +

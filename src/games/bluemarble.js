@@ -1,5 +1,5 @@
 /*
- * 부루마블 (3D) – 서버 게임 모듈
+ * 세계여행 마블 (3D) – 서버 게임 모듈
  * 공용 엔진(public/bluemarble-engine.js)을 감싸서 '보드게임 허브' 표준 인터페이스로 노출합니다.
  */
 'use strict';
@@ -29,7 +29,7 @@ const REASON_TEXT = {
 
 module.exports = {
   id: 'bluemarble',
-  title: '부루마블',
+  title: '세계여행 마블',
   subtitle: '주사위를 굴려 도시를 사고 건물을 세우는 3D 보드게임',
   emoji: '🎲',
   status: 'ready',

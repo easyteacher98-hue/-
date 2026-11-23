@@ -1,5 +1,5 @@
 /*
- * 할리갈리 화면 (입장 · 대기방 · 게임판 · 교사 관전 · AI 봇 연습)
+ * 과일 딩동 화면 (입장 · 대기방 · 게임판 · 교사 관전 · AI 봇 연습)
  * 규칙 계산은 public/engine.js 를 그대로 사용합니다.
  */
 (function () {
@@ -154,7 +154,7 @@
     }).join('');
 
     return (
-      '<h2>🔔 할리갈리 규칙</h2>' +
+      '<h2>🔔 과일 딩동 규칙</h2>' +
       '<p>카드에 그려진 과일을 세다가, <b>어떤 과일이든 정확히 5개</b>가 되는 순간 종을 치는 게임입니다.</p>' +
       '<h3>카드 구성 (총 56장)</h3>' +
       '<table class="deck-table">' +
@@ -261,7 +261,7 @@
       '</div>' +
       '<div class="screen-head">' +
         '<div>' +
-          '<h1 class="entry-title">🔔 할리갈리</h1>' +
+          '<h1 class="entry-title">🔔 과일 딩동</h1>' +
           '<p class="page-sub">과일이 정확히 5개가 되는 순간, 종을 치세요! 모둠 방을 골라 입장하세요.</p>' +
         '</div>' +
       '</div>' +
@@ -1075,7 +1075,7 @@
       BG.ui.screen(
         '<div class="screen-head">' +
           '<div>' +
-            '<a class="back-link" href="#/halligalli">← 할리갈리 입장</a>' +
+            '<a class="back-link" href="#/halligalli">← 과일 딩동 입장</a>' +
             '<h1 class="page-title">🤖 AI 봇과 연습</h1>' +
             '<p class="page-sub">서버에 접속하지 않아도 혼자서 4~5인 게임을 바로 테스트할 수 있습니다. (내 번호: ' + esc(myLabel()) + ')</p>' +
           '</div>' +

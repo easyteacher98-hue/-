@@ -1,5 +1,5 @@
 /*
- * 부루마블 (모두의마블 스타일) 게임 엔진 (공용)
+ * 세계여행 마블 (모두의마블 스타일) 게임 엔진 (공용)
  * - Node.js(require)와 브라우저(window.BlueMarble) 양쪽에서 동작하는 UMD 모듈입니다.
  * - 서버(모둠 방)와 브라우저(AI 봇 연습)가 같은 규칙 코드를 사용합니다.
  * - 서버가 주사위를 굴리고 판정하므로, 화면(3D)은 결과만 연출합니다.
@@ -184,10 +184,10 @@
     constructor(players, options) {
       const opts = options || {};
       if (!Array.isArray(players) || players.length < MIN_PLAYERS) {
-        throw new Error('부루마블은 최소 ' + MIN_PLAYERS + '명이 필요합니다.');
+        throw new Error('세계여행 마블은 최소 ' + MIN_PLAYERS + '명이 필요합니다.');
       }
       if (players.length > MAX_PLAYERS) {
-        throw new Error('부루마블은 최대 ' + MAX_PLAYERS + '명까지 참여할 수 있습니다.');
+        throw new Error('세계여행 마블은 최대 ' + MAX_PLAYERS + '명까지 참여할 수 있습니다.');
       }
       this.rng = opts.rng || Math.random;
       const rounds = Number(opts.maxRounds);
@@ -890,7 +890,7 @@
     hard: { label: '어려움', delay: [380, 800], buyRatio: 1.2, buildReserve: 150000 }
   };
 
-  const BOT_NAMES = ['주사위왕', '건물부자', '도시탐험가', '호텔사장', '별장지기', '부루마블러'];
+  const BOT_NAMES = ['주사위왕', '건물부자', '도시탐험가', '호텔사장', '별장지기', '마블여행자'];
 
   /**
    * 봇 행동 결정기.

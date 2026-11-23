@@ -1,5 +1,5 @@
 /*
- * 할리갈리 – 서버 게임 모듈
+ * 과일 딩동 – 서버 게임 모듈
  * 공용 엔진(public/engine.js)을 감싸서 '보드게임 허브'가 쓰는 표준 인터페이스로 노출합니다.
  *
  * 새 게임을 추가하려면 이 파일과 같은 형태의 모듈을 만들어 games/index.js 에 등록하면 됩니다.
@@ -24,7 +24,7 @@ const REASON_TEXT = {
 
 module.exports = {
   id: 'halligalli',
-  title: '할리갈리',
+  title: '과일 딩동',
   subtitle: '과일이 정확히 5개가 되는 순간, 종을 쳐라!',
   emoji: '🔔',
   status: 'ready',
