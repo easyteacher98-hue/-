@@ -298,6 +298,10 @@ function createHub(options) {
     return room.seats.find(function (s) { return s.token === token; }) || null;
   }
 
+  function humanSeats(room) {
+    return room.seats.filter(function (s) { return !s.isBot; });
+  }
+
   function removeSeat(room, seat) {
     room.seats = room.seats.filter(function (s) { return s.id !== seat.id; });
     if (room.hostId === seat.id) {
@@ -309,16 +313,36 @@ function createHub(options) {
     }
   }
 
-  function resetLobby(room) {
+  /**
+   * 방을 대기 상태로 되돌립니다.
+   * options.keepBots      : 봇 자리를 남길지 (방장의 '게임 종료'는 봇을 남겨 바로 다시 시작할 수 있게)
+   * options.keepOffline   : 연결이 끊긴 사람 자리도 남길지
+   */
+  function resetToWaiting(room, options) {
+    const opts = options || {};
     stopBotLoop(room);
     room.game = null;
     room.endWhenTwo = false;
-    room.seats = room.seats.filter(function (s) { return s.connected && !s.isBot; });
-    room.seats.forEach(function (s) { s.ready = false; });
+    room.finishedAt = null;
+    room.seats = room.seats.filter(function (s) {
+      if (opts.dropHumans) return !!opts.keepBots && s.isBot;
+      if (s.isBot) return !!opts.keepBots;
+      return !!opts.keepOffline || s.connected;
+    });
+    room.seats.forEach(function (s) { s.ready = !!s.isBot; });
     if (!room.seats.some(function (s) { return s.id === room.hostId; })) {
-      room.hostId = room.seats[0] ? room.seats[0].id : null;
+      room.hostId = room.seats.length ? room.seats[0].id : null;
     }
     room.lastEvent = '대기 중';
+    if (!room.seats.length && !room.isGroup) {
+      deleteRoom(room);
+      return false;
+    }
+    return true;
+  }
+
+  function resetLobby(room) {
+    return resetToWaiting(room, {});
   }
 
   function attachSeat(ws, room, seat) {
@@ -356,7 +380,9 @@ function createHub(options) {
       return sendError(ws, '이미 게임이 진행 중인 방입니다. 끝난 뒤에 입장해 주세요.', 'playing');
     }
     if (room.game && room.game.status === 'finished') {
-      resetLobby(room);
+      if (!resetLobby(room)) {
+        return sendError(ws, '방을 찾을 수 없습니다. 모둠 번호를 확인해 주세요.', 'no_room');
+      }
       broadcastRoom(room);
     }
     if (room.seats.length >= room.capacity) {
@@ -488,6 +514,11 @@ function createHub(options) {
     scheduleOverview();
   }
 
+  /**
+   * 학생이 스스로 방을 나갈 때 (연결이 끊긴 것과 다릅니다).
+   * - 자리를 실제로 정리하고, 게임 중이면 그 자리는 자동 플레이로 바뀌어 남은 사람들의 게임이 이어집니다.
+   * - 사람이 한 명도 남지 않으면(봇만 남으면) 모둠 방을 대기 상태(0/인원)로 되돌립니다.
+   */
   function leaveRoom(ws) {
     const room = ws.meta.room;
     const seat = ws.meta.seat;
@@ -496,18 +527,24 @@ function createHub(options) {
       return;
     }
     room.spectators.delete(ws);
+    const wasPlaying = !!(room.game && room.game.status === 'playing');
     if (seat) {
-      if (room.game && room.game.status === 'playing') {
-        // 게임 중 나가면 자동 플레이로 남겨 두고 관전 자리만 해제
-        seat.autoPilot = true;
-        seat.connected = false;
-        if (seat.ws === ws) seat.ws = null;
+      const name = seat.name;
+      room.seats = room.seats.filter(function (s) { return s.id !== seat.id; });
+      if (wasPlaying) {
         const gp = room.game.playerById(seat.id);
         if (gp) gp.isBot = true;
         ensureBotLoop(room);
-        touch(room, seat.name + '님이 나갔습니다. 자동 플레이로 계속합니다.');
-      } else {
-        removeSeat(room, seat);
+      }
+      if (room.hostId === seat.id) {
+        const next = room.seats.find(function (s) { return !s.isBot; }) || room.seats[0] || null;
+        room.hostId = next ? next.id : null;
+      }
+      touch(room, name + '님이 나갔습니다.');
+      if (humanSeats(room).length === 0) {
+        // 사람이 모두 나갔으니 봇만 남은 방을 대기 상태로 초기화합니다.
+        resetToWaiting(room, {});
+        if (rooms.has(room.key)) room.lastEvent = '사람이 모두 나가 대기 상태로 초기화했습니다.';
       }
     }
     ws.meta.room = null;
@@ -515,7 +552,56 @@ function createHub(options) {
     ws.meta.role = 'lobby';
     send(ws, { t: 'left' });
     if (rooms.has(room.key)) broadcastRoom(room);
-    scheduleOverview();
+    broadcastOverview();
+  }
+
+  /** 방장이 '게임 종료'를 눌렀을 때 → 대기실로 돌아갑니다. */
+  function endGame(ws, room, seat) {
+    if (!seat) return sendError(ws, '관전자는 게임을 종료할 수 없습니다.', 'spectator');
+    if (seat.id !== room.hostId) return sendError(ws, '방장만 게임을 종료할 수 있습니다.', 'not_host');
+    if (!room.game) return sendError(ws, '진행 중인 게임이 없습니다.', 'no_game');
+    if (room.game.status === 'playing') room.game.finishGame('closed_by_host');
+    resetToWaiting(room, { keepBots: true });
+    if (!rooms.has(room.key)) {
+      broadcastOverview();
+      return send(ws, { t: 'left' });
+    }
+    room.lastEvent = '방장이 게임을 종료했습니다. 대기실로 돌아왔습니다.';
+    broadcastRoom(room);
+    broadcastOverview();
+    send(ws, { t: 'action_result', ok: true, message: '게임을 종료하고 대기실로 돌아왔습니다.' });
+  }
+
+  /** 교사 관전 화면에서 막힌 방을 초기화합니다. (참가자는 내보내고 대기 상태로) */
+  function resetRoomByTeacher(ws, msg) {
+    const gameModule = games.get(msg.gameId || 'halligalli');
+    if (!gameModule) return sendError(ws, '플레이할 수 없는 게임입니다.', 'bad_game');
+    const room = getRoom(gameModule.id, msg.code);
+    if (!room) return sendError(ws, '방을 찾을 수 없습니다.', 'no_room');
+    if (ws.meta.seat) return sendError(ws, '참가 중인 학생은 방을 초기화할 수 없습니다.', 'not_teacher');
+
+    const removedSeats = room.seats.slice();
+    resetToWaiting(room, { dropHumans: true });
+    for (const seat of removedSeats) {
+      if (seat.ws && seat.ws !== ws) {
+        send(seat.ws, {
+          t: 'room_reset',
+          gameId: room.gameId,
+          code: room.code,
+          name: room.name,
+          message: '선생님이 ' + room.name + ' 방을 초기화했습니다.'
+        });
+        seat.ws.meta.room = null;
+        seat.ws.meta.seat = null;
+        seat.ws.meta.role = 'lobby';
+      }
+    }
+    if (rooms.has(room.key)) {
+      room.lastEvent = '선생님이 방을 초기화했습니다.';
+      broadcastRoom(room);
+    }
+    broadcastOverview();
+    send(ws, { t: 'room_reset', self: true, gameId: room.gameId, code: room.code, name: room.name, message: room.name + ' 방을 초기화했습니다.' });
   }
 
   /* ---------------- 메시지 처리 ---------------- */
@@ -542,6 +628,13 @@ function createHub(options) {
         return createRoomFor(ws, msg);
       case 'leave':
         return leaveRoom(ws);
+      case 'endGame': {
+        const room = ws.meta.room;
+        if (!room) return sendError(ws, '방에 입장해야 합니다.', 'no_room');
+        return endGame(ws, room, ws.meta.seat);
+      }
+      case 'resetRoom':
+        return resetRoomByTeacher(ws, msg);
       case 'spectate': {
         const gameModule = games.get(msg.gameId);
         if (!gameModule) return sendError(ws, '플레이할 수 없는 게임입니다.', 'bad_game');

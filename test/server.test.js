@@ -337,3 +337,189 @@ test('연결이 끊긴 플레이어는 자동 플레이로 바뀌고 게임이 �
     await env.hub.close();
   }
 });
+
+/* ---------------- 방 나가기 · 게임 종료 · 방 초기화 ---------------- */
+
+async function startRoomWithBots(env, clients, code, nickname, bots) {
+  const a = await connect(env.ws);
+  clients.push(a);
+  await a.next('welcome');
+  a.send({ t: 'join', gameId: 'halligalli', code: code, nickname: nickname });
+  const joined = await a.next('joined');
+  for (let i = 0; i < bots; i++) a.send({ t: 'addBot' });
+  await a.next(function (m) {
+    return m.t === 'room' && m.room.code === code &&
+      m.room.seats.filter(function (s) { return s.isBot; }).length === bots;
+  });
+  a.send({ t: 'start' });
+  await a.next(function (m) { return m.t === 'room' && m.room.code === code && m.room.status === 'playing'; });
+  return { client: a, joined: joined };
+}
+
+test('게임 중 방 나가기: 자리가 사라지고, 남은 사람이 없으면 대기 상태(0명)로 자동 초기화된다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const started = await startRoomWithBots(env, clients, '6', '나가기', 3);
+    const room = env.hub.getRoom('halligalli', '6');
+    assert.equal(room.seats.length, 4);
+    assert.ok(room.game);
+
+    started.client.send({ t: 'leave' });
+    await started.client.next('left');
+
+    // 사람이 0명 → 봇만 남았으므로 모둠 방은 대기 상태 0/4로 초기화
+    assert.equal(room.game, null, '게임이 정리된다');
+    assert.equal(room.seats.length, 0, '참가자 자리가 모두 비워진다');
+    assert.equal(room.status, undefined, '방 자체는 남아 있다');
+
+    const overview = await connect(env.ws);
+    clients.push(overview);
+    await overview.next('welcome');
+    overview.send({ t: 'overview', gameId: 'halligalli' });
+    const rooms = await overview.next('rooms');
+    const room6 = rooms.rooms.find(function (r) { return r.code === '6'; });
+    assert.equal(room6.status, 'waiting');
+    assert.equal(room6.playerCount, 0);
+    assert.equal(room6.humanCount, 0);
+    assert.equal(room6.botCount, 0);
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('게임 중 한 명이 나가도 남은 사람의 게임은 이어지고, 나간 자리는 자동 플레이가 된다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    clients.push(a);
+    await a.next('welcome');
+    a.send({ t: 'join', gameId: 'halligalli', code: '5', nickname: '남는이' });
+    await a.next('joined');
+
+    const b = await connect(env.ws);
+    clients.push(b);
+    await b.next('welcome');
+    b.send({ t: 'join', gameId: 'halligalli', code: '5', nickname: '나가는이' });
+    const joinedB = await b.next('joined');
+    b.send({ t: 'ready', ready: true });
+    a.send({ t: 'addBot' });
+    a.send({ t: 'addBot' });
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '5' && m.room.seats.length === 4 && m.room.seats.some(function (s) { return s.name === '나가는이' && s.ready; });
+    });
+    a.send({ t: 'start' });
+    await a.next(function (m) { return m.t === 'room' && m.room.code === '5' && m.room.status === 'playing'; });
+
+    const room = env.hub.getRoom('halligalli', '5');
+    assert.ok(room.game);
+    assert.equal(room.game.players.length, 4);
+
+    // 한 명이 나가면 자리는 정리되지만 게임은 이어지고, 나간 사람 자리는 자동 플레이가 된다
+    b.send({ t: 'leave' });
+    await b.next('left');
+    assert.equal(room.seats.length, 3, '나간 사람 자리는 사라진다');
+    assert.equal(room.seats.some(function (s) { return s.name === '나가는이'; }), false);
+    assert.ok(room.game, '게임은 계속된다');
+    assert.equal(room.game.playerById(joinedB.playerId).isBot, true, '나간 자리는 자동 플레이');
+    assert.equal(room.seats[0].name, '남는이');
+    assert.equal(room.hostId, room.seats[0].id, '남은 사람이 방장이 된다');
+
+    // 마지막 사람까지 나가면 봇만 남으므로 대기 상태로 자동 초기화
+    a.send({ t: 'leave' });
+    await a.next('left');
+    assert.equal(room.seats.length, 0);
+    assert.equal(room.game, null);
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('방장이 게임 종료를 누르면 대기실로 돌아오고 봇은 남아 바로 다시 시작할 수 있다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    clients.push(a);
+    await a.next('welcome');
+    a.send({ t: 'join', gameId: 'halligalli', code: '4', nickname: '방장' });
+    await a.next('joined');
+    const b = await connect(env.ws);
+    clients.push(b);
+    await b.next('welcome');
+    b.send({ t: 'join', gameId: 'halligalli', code: '4', nickname: '친구' });
+    await b.next('joined');
+    b.send({ t: 'ready', ready: true });
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '4' && m.room.seats.some(function (s) { return s.name === '친구' && s.ready; });
+    });
+    a.send({ t: 'addBot' });
+    a.send({ t: 'start' });
+    await a.next(function (m) { return m.t === 'room' && m.room.code === '4' && m.room.status === 'playing'; });
+
+    a.send({ t: 'endGame' });
+    const lobby = await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '4' && m.room.status === 'waiting';
+    });
+    assert.equal(lobby.room.game, null);
+    const room = env.hub.getRoom('halligalli', '4');
+    assert.equal(room.seats.filter(function (s) { return !s.isBot; }).length, 2, '사람은 그대로 남는다');
+    assert.equal(room.seats.filter(function (s) { return s.isBot; }).length, 1, '봇도 남아 바로 다시 시작할 수 있다');
+    assert.equal(room.hostId, room.seats[0].id);
+    assert.ok(room.seats.every(function (s) { return s.isBot || s.ready === false; }));
+
+    // 방장이 아니면 게임 종료를 할 수 없다
+    b.send({ t: 'endGame' });
+    const denied = await b.next(function (m) { return m.t === 'error' && m.code === 'not_host'; });
+    assert.equal(denied.code, 'not_host');
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('교사가 진행 중인 모둠 방을 초기화하면 참가자가 정리되고 대기 상태가 된다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const started = await startRoomWithBots(env, clients, '3', '학생', 2);
+    const room = env.hub.getRoom('halligalli', '3');
+    assert.ok(room.game);
+
+    // 참가 중인 학생은 방을 초기화할 수 없다
+    started.client.send({ t: 'resetRoom', gameId: 'halligalli', code: '3' });
+    const denied = await started.client.next(function (m) { return m.t === 'error' && m.code === 'not_teacher'; });
+    assert.equal(denied.code, 'not_teacher');
+
+    const teacher = await connect(env.ws);
+    clients.push(teacher);
+    await teacher.next('welcome');
+    teacher.send({ t: 'overview', gameId: 'halligalli' });
+    const rooms = await teacher.next('rooms');
+    assert.equal(rooms.rooms.find(function (r) { return r.code === '3'; }).status, 'playing');
+
+    teacher.send({ t: 'resetRoom', gameId: 'halligalli', code: '3' });
+    const own = await teacher.next(function (m) { return m.t === 'room_reset' && m.self === true; });
+    assert.match(own.message, /초기화/);
+    const kicked = await started.client.next('room_reset');
+    assert.match(kicked.message, /선생님/);
+
+    assert.equal(room.game, null);
+    assert.equal(room.seats.length, 0);
+    const overview = await teacher.next(function (m) {
+      return m.t === 'rooms' && m.rooms.some(function (r) { return r.code === '3' && r.status === 'waiting'; });
+    });
+    assert.equal(overview.rooms.find(function (r) { return r.code === '3'; }).playerCount, 0);
+
+    // 초기화 뒤에는 새 학생이 다시 들어올 수 있다
+    started.client.send({ t: 'join', gameId: 'halligalli', code: '3', nickname: '새학생' });
+    const rejoin = await started.client.next('joined');
+    assert.equal(rejoin.code, '3');
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});

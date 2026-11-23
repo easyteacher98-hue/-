@@ -48,6 +48,11 @@
       '<div class="game-emoji">' + game.emoji + '</div>' +
       '<div class="game-name">' + BG.ui.escape(game.title) + '</div>' +
       '<div class="game-desc">' + BG.ui.escape(game.desc) + '</div>' +
+      (playable && BG.cards
+        ? '<div class="hero-fruits" style="justify-content:flex-start;margin-top:-2px" aria-hidden="true">' +
+            ['strawberry', 'banana', 'lime', 'plum'].map(function (id) { return BG.cards.fruitIcon(id); }).join('') +
+          '</div>'
+        : '') +
       '<div class="game-foot">' +
         '<span class="game-players">' + BG.ui.escape(game.players) + '</span>' +
         (playable
@@ -69,28 +74,31 @@
   function render() {
     const connected = BG.net.connected;
     const games = BG.portalGames.map(gameCard).join('');
+    const heroFruits = (BG.cards && BG.HG_FRUITS_FOR_HERO ? BG.HG_FRUITS_FOR_HERO : ['strawberry', 'banana', 'lime', 'plum'])
+      .map(function (id) { return BG.cards ? BG.cards.fruitIcon(id) : ''; }).join('');
 
     const html =
       '<section class="portal-hero">' +
         '<div class="portal-kicker">모둠 수업 보드게임</div>' +
-        '<h1 class="portal-title">모둠 보드게임</h1>' +
+        '<h1 class="portal-title">모둠 <em>보드게임</em></h1>' +
         '<p class="portal-sub">모둠원이 각자 기기로 접속해 함께 즐기는 실시간 보드게임.<br>' +
           '선생님은 교사 관전 모드로 모든 모둠의 진행 상황을 한눈에 볼 수 있어요.</p>' +
+        '<div class="hero-fruits" aria-hidden="true">' + heroFruits + '</div>' +
       '</section>' +
       '<div class="game-grid">' + games + '</div>' +
       '<section class="panel" style="margin-top:22px">' +
         '<div class="panel-title">🎒 수업에서 이렇게 써요</div>' +
         '<div class="row" style="gap:14px;align-items:stretch">' +
           '<div class="tool-card" style="cursor:default;flex:1;min-width:210px">' +
-            '<div class="tool-emoji">1️⃣</div><div><div class="tool-title">게임 고르기</div>' +
+            '<div class="tool-emoji">1️⃣</div><div class="tool-body"><div class="tool-title">게임 고르기</div>' +
             '<div class="tool-desc">할리갈리를 선택하면 1~6모둠 방이 열려요.</div></div>' +
           '</div>' +
           '<div class="tool-card" style="cursor:default;flex:1;min-width:210px">' +
-            '<div class="tool-emoji">2️⃣</div><div><div class="tool-title">모둠 방 입장</div>' +
+            '<div class="tool-emoji">2️⃣</div><div class="tool-body"><div class="tool-title">모둠 방 입장</div>' +
             '<div class="tool-desc">닉네임을 쓰고 자기 모둠 번호를 누르면 바로 입장!</div></div>' +
           '</div>' +
           '<div class="tool-card" style="cursor:default;flex:1;min-width:210px">' +
-            '<div class="tool-emoji">3️⃣</div><div><div class="tool-title">선생님은 관전</div>' +
+            '<div class="tool-emoji">3️⃣</div><div class="tool-body"><div class="tool-title">선생님은 관전</div>' +
             '<div class="tool-desc">교사 관전 모드에서 6개 모둠을 실시간으로 확인해요.</div></div>' +
           '</div>' +
         '</div>' +

@@ -20,6 +20,8 @@
     spectateSent: {},
     hint: false,
     seenTop: {},
+    pendingResetCode: null,
+    fx: { lastBellAt: null, freshAt: null, soundAt: null, kind: 'correct' },
     bot: { active: false, game: null, driver: null, timer: null, level: 'normal', count: 4 }
   };
 
@@ -27,6 +29,10 @@
 
   function screenName() {
     return document.body.dataset.screen || '';
+  }
+
+  function avatar(who, size) {
+    return BG.avatars ? BG.avatars.html(who, size) : '';
   }
 
   function readNickname() {
@@ -49,11 +55,38 @@
   function clearSeat() {
     BG.session.remove(SEAT_KEY);
   }
+  function mySeatCode() {
+    const seat = getSeat();
+    return seat && seat.code ? String(seat.code).toUpperCase() : '';
+  }
 
   function statusBadge(status) {
     if (status === 'playing') return '<span class="badge playing">진행 중</span>';
     if (status === 'finished') return '<span class="badge finished">종료</span>';
     return '<span class="badge ready">대기 중</span>';
+  }
+
+  function soundOn() {
+    return !!(BG.sound && BG.sound.enabled);
+  }
+
+  function soundButton() {
+    const on = soundOn();
+    return '<button class="btn btn-sm btn-ghost sound-toggle" data-action="hg.soundToggle" aria-pressed="' +
+      (on ? 'true' : 'false') + '" title="' + (on ? '종소리 끄기' : '종소리 켜기') + '">' +
+      (on ? '🔔 소리' : '🔕 무음') + '</button>';
+  }
+
+  function confirmDialog(opts) {
+    BG.ui.modal(
+      '<h2>' + esc(opts.title) + '</h2>' +
+      '<p>' + esc(opts.body) + '</p>' +
+      '<div class="row" style="justify-content:flex-end;margin-top:18px">' +
+        '<button class="btn btn-ghost" data-action="ui.closeModal">취소</button>' +
+        '<button class="btn ' + (opts.danger ? 'btn-danger' : 'btn-primary') + '" data-action="' +
+          opts.action + '">' + esc(opts.confirm) + '</button>' +
+      '</div>'
+    );
   }
 
   function rulesHtml() {
@@ -85,7 +118,8 @@
       '</ol>' +
       '<h3>조작 방법</h3>' +
       '<p>종은 화면 가운데 <b>🔔 종 버튼</b> 또는 <b>스페이스바</b>, 카드 뒤집기는 <b>카드 뒤집기 버튼</b> 또는 <b>F 키</b>입니다.<br>' +
-      '모르면 [합계 보기]를 켜서 과일별 합계를 확인하며 연습해 보세요.</p>' +
+      '모르면 [합계 보기]를 켜서 과일별 합계를 확인하며 연습해 보세요.<br>' +
+      '그만하고 싶을 때는 화면 위 <b>[방 나가기]</b>를 누르면 됩니다.</p>' +
       '<button class="btn btn-primary btn-block" data-action="ui.closeModal">확인</button>'
     );
   }
@@ -101,9 +135,10 @@
     const cls = status === 'playing' ? 'is-playing' : status === 'finished' ? 'is-done' : 'is-open';
     const count = room.playerCount || 0;
     const cap = room.capacity || 4;
-    const names = (room.seats || []).map(function (s) {
-      return s.name + (s.isBot ? '🤖' : '');
-    }).join(', ');
+    const seats = room.seats || [];
+    const mine = mySeatCode() === String(room.code).toUpperCase();
+    const stack = seats.slice(0, 4).map(function (s) { return avatar(s, 'xs'); }).join('');
+    const names = seats.map(function (s) { return s.name + (s.isBot ? ' 🤖' : ''); }).join(', ');
     const full = count >= cap;
     const canEnter = status !== 'playing' && !full;
     let label = '입장';
@@ -111,14 +146,21 @@
     else if (full) label = '만석';
     else if (status === 'finished') label = '새로 시작';
 
+    const mainButton = mine
+      ? '<button class="btn btn-primary btn-sm" data-action="hg.reenter" data-code="' + esc(room.code) + '">다시 들어가기</button>'
+      : '<button class="btn ' + (canEnter ? 'btn-primary' : '') + ' btn-sm" data-action="hg.enterGroup" data-code="' + esc(room.code) + '"' +
+        (canEnter ? '' : ' disabled') + '>' + label + '</button>';
+
     return (
-      '<div class="group-card ' + cls + '">' +
+      '<div class="group-card ' + cls + (mine ? ' is-self' : '') + '">' +
         '<div class="group-head"><span class="group-name">' + esc(room.name) + '</span>' +
           '<span class="group-occ"><b>' + count + '</b>/' + cap + '명</span></div>' +
-        '<div class="group-players">' + (names ? esc(names) : '아직 아무도 없어요') + '</div>' +
+        (mine ? '<div class="group-self-line"><span class="badge badge-self">🏠 내가 참여 중</span></div>' : '') +
+        '<div class="group-players">' +
+          (stack ? '<span class="avatar-stack">' + stack + '</span>' : '') +
+          '<span class="group-names">' + (names ? esc(names) : '아직 아무도 없어요') + '</span></div>' +
         '<div class="group-actions">' +
-          '<button class="btn ' + (canEnter ? 'btn-primary' : '') + ' btn-sm" data-action="hg.enterGroup" data-code="' + esc(room.code) + '"' +
-            (canEnter ? '' : ' disabled') + '>' + label + '</button>' +
+          mainButton +
           (status === 'playing' || status === 'finished'
             ? '<button class="btn btn-sm" data-action="hg.watch" data-code="' + esc(room.code) + '">관전</button>'
             : '') +
@@ -127,15 +169,21 @@
     );
   }
 
+  function myRoomBanner() {
+    if (!S.room || S.room.gameId !== 'halligalli') return '';
+    return (
+      '<div class="my-room-banner">' +
+        avatar({ name: BG.state.nickname || '나' }, 'sm') +
+        '<span>지금 <b>' + esc(S.room.name) + '</b>에 참여 중이에요.</span>' +
+        '<span class="spacer"></span>' +
+        '<button class="btn btn-sm btn-primary" data-action="hg.reenter" data-code="' + esc(S.room.code) + '">다시 들어가기</button>' +
+        '<button class="btn btn-sm btn-ghost" data-action="hg.leave">나가기</button>' +
+      '</div>'
+    );
+  }
+
   function renderEntry() {
     BG.net.connect();
-    if (S.room) {
-      // 모둠 선택으로 돌아오면 대기방 자리를 반납합니다.
-      BG.net.send({ t: 'leave' });
-      S.room = null;
-      S.pendingJoin = null;
-      clearSeat();
-    }
     const groups = S.rooms.filter(function (r) { return r.gameId === 'halligalli'; });
     const groupCards = groups.length
       ? groups.map(groupCard).join('')
@@ -157,11 +205,16 @@
         '</div>' +
       '</div>' +
 
+      myRoomBanner() +
+
       '<div class="panel" style="margin-bottom:16px">' +
         '<div class="row" style="gap:14px;align-items:flex-end">' +
-          '<label class="field" style="flex:1;min-width:180px">닉네임 (최대 12자)' +
-            '<input id="nickname" class="input" maxlength="12" autocomplete="nickname" placeholder="예: 지원" value="' +
-              esc(BG.state.nickname || '') + '">' +
+          '<label class="field" style="flex:1;min-width:200px">닉네임 (최대 12자)' +
+            '<span class="row" style="gap:8px;flex-wrap:nowrap;align-items:center">' +
+              '<span id="my-avatar-preview">' + avatar(BG.state.nickname || '나', 'sm') + '</span>' +
+              '<input id="nickname" class="input" maxlength="12" autocomplete="nickname" placeholder="예: 지원" style="flex:1" value="' +
+                esc(BG.state.nickname || '') + '">' +
+            '</span>' +
           '</label>' +
           '<button class="btn btn-ghost" data-action="hg.rules">📖 게임 규칙 보기</button>' +
         '</div>' +
@@ -173,17 +226,17 @@
       '<div class="entry-tools">' +
         '<button class="tool-card" data-action="hg.bot">' +
           '<span class="tool-emoji">🤖</span>' +
-          '<span><span class="tool-title">AI 봇과 연습</span>' +
+          '<span class="tool-body"><span class="tool-title">AI 봇과 연습</span>' +
           '<span class="tool-desc">혼자서도 바로 4~5인 게임을 테스트할 수 있어요</span></span>' +
         '</button>' +
         '<button class="tool-card" data-action="hg.teacher">' +
           '<span class="tool-emoji">👩‍🏫</span>' +
-          '<span><span class="tool-title">교사 관전 모드</span>' +
+          '<span class="tool-body"><span class="tool-title">교사 관전 모드</span>' +
           '<span class="tool-desc">6개 모둠의 진행 상황을 한눈에 보고 관전합니다</span></span>' +
         '</button>' +
         '<button class="tool-card" data-action="hg.createRoom">' +
           '<span class="tool-emoji">➕</span>' +
-          '<span><span class="tool-title">새 방 만들기</span>' +
+          '<span class="tool-body"><span class="tool-title">새 방 만들기</span>' +
           '<span class="tool-desc">모둠 방이 부족할 때 새 방을 만들어 코드를 나눠 줍니다</span></span>' +
         '</button>' +
       '</div>' +
@@ -213,7 +266,7 @@
       if (!s.isBot && !s.connected) tags.push('<span class="tag off">연결 끊김</span>');
       return (
         '<div class="seat ' + (s.id === room.youId ? 'is-self' : '') + '">' +
-          '<div class="seat-avatar">' + (s.isBot ? '🤖' : esc(s.name.slice(0, 1))) + '</div>' +
+          '<span class="seat-avatar">' + avatar(s) + '</span>' +
           '<div class="seat-main"><div class="seat-name">' + esc(s.name) + '</div>' +
             '<div class="seat-sub">' + (s.isBot ? '자동으로 플레이합니다' : s.ready ? '준비 완료' : '준비를 기다리는 중') + '</div></div>' +
           '<div class="tags">' + tags.join('') + '</div>' +
@@ -223,7 +276,7 @@
 
     const empty = [];
     for (let i = room.seats.length; i < room.capacity; i++) {
-      empty.push('<div class="seat" style="opacity:.45"><div class="seat-avatar">＋</div>' +
+      empty.push('<div class="seat" style="opacity:.5"><div class="seat-avatar avatar">＋</div>' +
         '<div class="seat-main"><div class="seat-name">빈 자리</div><div class="seat-sub">친구가 입장할 수 있어요</div></div></div>');
     }
 
@@ -242,7 +295,7 @@
         '</div>' +
         '<div class="row">' +
           '<button class="btn btn-ghost btn-sm" data-action="hg.rules">📖 규칙</button>' +
-          '<button class="btn btn-danger btn-sm" data-action="hg.leave">나가기</button>' +
+          '<button class="btn btn-danger btn-sm" data-action="hg.leave">🚪 방 나가기</button>' +
         '</div>' +
       '</div>' +
 
@@ -273,7 +326,7 @@
               '<button class="btn btn-block" data-action="hg.rules">📖 게임 규칙 보기</button>' +
             '</div>' +
             (isHost
-              ? '<label class="row" style="margin-top:14px;font-size:13px;font-weight:700;color:var(--muted)">' +
+              ? '<label class="row" style="margin-top:14px;font-size:12.5px;font-weight:800;color:var(--muted)">' +
                   '<input type="checkbox" data-action="hg.toggleEndTwo" ' + (room.endWhenTwo ? 'checked' : '') + ' style="width:18px;height:18px">' +
                   '2명 남았을 때 게임 종료</label>'
               : '') +
@@ -309,7 +362,9 @@
     return (
       '<div class="tile ' + (player.isTurn && !player.eliminated ? 'is-turn ' : '') + (isSelf ? 'is-self ' : '') + (player.eliminated ? 'is-out' : '') + '">' +
         '<div class="tile-top">' +
-          '<span class="tile-name" title="' + esc(player.name) + '">' + esc(player.name) + (player.isBot ? ' 🤖' : '') + '</span>' +
+          '<span class="tile-person">' + avatar(player, 'xs') +
+            '<span class="tile-name" title="' + esc(player.name) + '">' + esc(player.name) + (player.isBot ? ' 🤖' : '') + '</span>' +
+          '</span>' +
           '<span class="tile-cards">' + player.totalCards + '장</span>' +
         '</div>' +
         '<div class="tile-card">' + card + '</div>' +
@@ -318,15 +373,51 @@
     );
   }
 
-  function bellHtml(disabled) {
+  /** 마지막 종 소식이 2초 안이면 종 위에 말풍선을 보여 줍니다. */
+  function bellFx(game) {
+    const lb = game.lastBell;
+    if (!lb || !lb.at) return null;
+    const fresh = S.fx.lastBellAt !== lb.at;
+    const age = Date.now() - lb.at;
+    if (fresh && age > 2400) return null;
+    if (!fresh && age > 2600) return null;
+    if (fresh) {
+      S.fx.lastBellAt = lb.at;
+      S.fx.freshAt = lb.at;
+      S.fx.kind = lb.correct ? 'correct' : 'wrong';
+    }
+    return {
+      kind: S.fx.kind,
+      text: lb.correct ? '정답! 카드 ' + lb.cards + '장' : '앗, 5개가 아니에요!',
+      fresh: S.fx.freshAt === lb.at
+    };
+  }
+
+  function bellHtml(disabled, fx) {
     return (
       '<div class="bell-slot">' +
+        (fx ? '<div class="bell-pop ' + fx.kind + '">' + esc(fx.text) + '</div>' : '') +
         '<button class="bell" data-action="hg.ring" aria-label="종 치기" ' + (disabled ? 'disabled' : '') + '>' +
-          '<span>🔔</span><span class="bell-label">종</span>' +
+          '<span class="bell-emoji">🔔</span><span class="bell-label">종</span>' +
         '</button>' +
         '<span class="bell-key">Space</span>' +
       '</div>'
     );
+  }
+
+  function sparksHtml() {
+    let out = '<div class="fx-layer">';
+    for (let i = 0; i < 14; i++) {
+      const angle = (Math.PI * 2 * i) / 14 + Math.random() * 0.4;
+      const dist = 60 + Math.random() * 90;
+      const dx = Math.round(Math.cos(angle) * dist);
+      const dy = Math.round(Math.sin(angle) * dist) - 20;
+      const colors = ['#ffd76e', '#ff9db0', '#8fd9ab', '#9cc4f2', '#c4acf0'];
+      out += '<span class="spark" style="--dx:' + dx + 'px;--dy:' + dy + 'px;background:' +
+        colors[i % colors.length] + ';animation:sparkFly ' + (0.7 + Math.random() * 0.5) + 's ease-out forwards;' +
+        'animation-delay:' + (Math.random() * 0.1) + 's"></span>';
+    }
+    return out + '</div>';
   }
 
   function totalsHtml(game) {
@@ -385,6 +476,7 @@
       '<div class="winner-overlay">' +
         '<div class="winner-card">' +
           '<div class="winner-crown">🏆</div>' +
+          (game.winner ? avatar(game.winner, 'lg') : '') +
           '<div class="winner-title">' + esc(game.winner || '게임') + ' 우승!</div>' +
           '<p class="winner-sub">' + (game.status === 'finished' ? '수고했어요! 다음 판도 도전해 볼까요?' : '') + '</p>' +
           '<div class="stack">' + buttons.join('') + '</div>' +
@@ -399,7 +491,8 @@
     const tiles = players.map(function (p) { return tileHtml(p, view.youId); });
     const bellIndex = Math.ceil(tiles.length / 2);
     const canRing = game.status === 'playing' && view.role === 'player';
-    tiles.splice(bellIndex, 0, bellHtml(!canRing));
+    const fx = bellFx(game);
+    tiles.splice(bellIndex, 0, bellHtml(!canRing, fx));
 
     const me = players.find(function (p) { return p.id === view.youId; });
     const canFlip = view.role === 'player' && game.status === 'playing' && me && me.isTurn && me.deckCount > 0;
@@ -407,8 +500,11 @@
     const myBar = view.role === 'spectator'
       ? '<div class="spectator-note">👀 관전 중입니다 — 카드나 종을 누를 수 없어요.</div>'
       : '<div class="my-bar">' +
-          '<div class="my-info">내 카드 <b>' + (me ? me.totalCards : 0) + '</b>장 · 테이블 <b>' + game.tableCount + '</b>장 · ' +
-            '<span>종 ' + game.bells.correct + '회 성공 / ' + game.bells.wrong + '회 실수</span></div>' +
+          '<div class="my-who">' + avatar(me || { name: BG.state.nickname }, 'sm') +
+            '<div><div class="my-name">' + esc(me ? me.name : BG.state.nickname) + '</div>' +
+            '<div class="my-info">내 카드 <b>' + (me ? me.totalCards : 0) + '</b>장 · 테이블 <b>' + game.tableCount + '</b>장 · ' +
+              '종 <b>' + game.bells.correct + '</b>번 성공 / <b>' + game.bells.wrong + '</b>번 실수</div></div>' +
+          '</div>' +
           '<span class="spacer"></span>' +
           '<button class="flip-btn" data-action="hg.flip" ' + (canFlip ? '' : 'disabled') + '>카드 뒤집기 <span class="key">F</span></button>' +
         '</div>';
@@ -419,33 +515,63 @@
         ? '관전 모드 · 방 코드 ' + view.code
         : '방 코드 ' + view.code + ' · 친구들과 실시간 대전';
 
-    return (
+    const isMultiHost = view.mode === 'multi' && view.role === 'player' && view.isHost;
+
+    const tools =
+      '<div class="board-tools">' +
+        '<button class="btn btn-sm ' + (S.hint ? 'btn-gold' : '') + '" data-action="hg.hintToggle" aria-pressed="' + (S.hint ? 'true' : 'false') + '">합계 보기</button>' +
+        '<button class="btn btn-sm" data-action="hg.rules">📖 규칙</button>' +
+        soundButton() +
+        (isMultiHost ? '<button class="btn btn-sm btn-warn" data-action="hg.endGame">⏹ 게임 종료</button>' : '') +
+        (view.role === 'spectator'
+          ? '<button class="btn btn-sm btn-warn" data-action="hg.resetRoom" data-code="' + esc(view.code) + '" data-name="' + esc(String(view.title).replace(' 관전', '')) + '">🧹 방 초기화</button>' +
+            '<button class="btn btn-sm btn-danger" data-action="hg.watchBack">관전 종료</button>'
+          : '<button class="btn btn-sm btn-danger" data-action="hg.leave">🚪 방 나가기</button>') +
+      '</div>';
+
+    const backHref = view.role === 'spectator' ? '#/halligalli/teacher' : '#/halligalli';
+    const backLabel = view.role === 'spectator' ? '모둠 목록' : '모둠 선택';
+
+    const html =
       '<div class="screen-head">' +
         '<div>' +
-          '<a class="back-link" href="' + (view.role === 'spectator' ? '#/halligalli/teacher' : '#/halligalli') + '">← ' +
-            (view.role === 'spectator' ? '모둠 목록' : '모둠 선택') + '</a>' +
+          '<a class="back-link" href="' + backHref + '">← ' + backLabel + '</a>' +
           '<h1 class="room-name">' + esc(view.title) + ' ' +
             (view.mode === 'bot' ? '<span class="badge playing">연습</span>' : statusBadge(game.status)) + '</h1>' +
           '<p class="page-sub">' + esc(subtitle) + '</p>' +
         '</div>' +
-        '<div class="board-tools">' +
-          '<button class="btn btn-sm ' + (S.hint ? 'btn-gold' : '') + '" data-action="hg.hintToggle" aria-pressed="' + (S.hint ? 'true' : 'false') + '">합계 보기</button>' +
-          '<button class="btn btn-sm" data-action="hg.rules">📖 규칙</button>' +
-          (view.role === 'spectator'
-            ? '<button class="btn btn-sm btn-danger" data-action="hg.watchBack">관전 종료</button>'
-            : '<button class="btn btn-sm btn-danger" data-action="hg.leave">나가기</button>') +
-        '</div>' +
+        tools +
       '</div>' +
 
       '<div class="board">' +
         '<div class="board-head">' + turnBanner(game, view.youId, view.role, view.mode) + '</div>' +
-        '<div class="table">' + tiles.join('') + '</div>' +
+        '<div class="table">' +
+          tiles.join('') +
+          (fx && fx.fresh ? '<div class="board-flash ' + fx.kind + '"></div>' + sparksHtml() : '') +
+        '</div>' +
         totalsHtml(game) +
         myBar +
         logHtml(game) +
       '</div>' +
-      winnerOverlay(game, view)
-    );
+      winnerOverlay(game, view);
+
+    // 피드백은 한 번만 그려지도록 표시를 소비합니다.
+    if (fx) S.fx.freshAt = null;
+
+    return html;
+  }
+
+  /** 종을 쳤을 때(내 차례든 다른 사람이든) 소리를 냅니다. */
+  function playBellSound(game) {
+    const lb = game && game.lastBell;
+    if (!lb || !lb.at) return;
+    if (Date.now() - lb.at > 3000) return;
+    if (S.fx.soundAt === lb.at) return;
+    S.fx.soundAt = lb.at;
+    if (BG.sound) {
+      BG.sound.bell(lb.correct ? 'correct' : 'wrong');
+      if (lb.correct) BG.sound.cheer();
+    }
   }
 
   /* ---------------- 방 화면 ---------------- */
@@ -518,7 +644,10 @@
             '<h1 class="room-name">' + esc(room.name) + ' 관전</h1>' +
             '<p class="page-sub">아직 게임이 시작되지 않았습니다. 학생들이 모이면 게임판이 보입니다.</p>' +
           '</div>' +
-          '<button class="btn btn-sm btn-danger" data-action="hg.watchBack">관전 종료</button>' +
+          '<div class="row">' +
+            '<button class="btn btn-sm btn-warn" data-action="hg.resetRoom" data-code="' + esc(room.code) + '" data-name="' + esc(room.name) + '">🧹 방 초기화</button>' +
+            '<button class="btn btn-sm btn-danger" data-action="hg.watchBack">관전 종료</button>' +
+          '</div>' +
         '</div>' +
         '<div class="empty">대기 중인 모둠입니다.<br><br>' +
           '<button class="btn btn-primary btn-sm" data-action="hg.watchBack">모둠 목록으로</button></div>',
@@ -548,7 +677,7 @@
     let list = '';
     if (status === 'waiting') {
       list = (room.seats || []).map(function (s) {
-        return '<div class="room-player ' + (s.ready || s.isBot ? '' : '') + '">' +
+        return '<div class="room-player">' + avatar(s, 'xs') +
           '<span class="who">' + esc(s.name) + (s.isBot ? ' 🤖' : '') + (s.isHost ? ' 👑' : '') + '</span>' +
           '<span class="cnt">' + (s.isBot ? '봇' : s.ready ? '준비' : '대기') + '</span></div>';
       }).join('');
@@ -556,6 +685,7 @@
     } else {
       list = (room.players || []).map(function (p) {
         return '<div class="room-player ' + (p.isTurn ? 'turn' : '') + ' ' + (p.eliminated ? 'out' : '') + '">' +
+          avatar({ name: p.name, id: p.id }, 'xs') +
           '<span class="who">' + (p.isTurn ? '▶ ' : '') + esc(p.name) + (p.isBot ? ' 🤖' : '') + '</span>' +
           '<span class="cnt">' + p.deckCount + '장</span></div>';
       }).join('');
@@ -576,7 +706,10 @@
         '<div class="room-card-meta">' + esc(meta) + '</div>' +
         '<div class="room-players">' + list + '</div>' +
         '<div class="room-event">최근: ' + esc(room.lastEvent || '—') + '</div>' +
-        '<button class="btn btn-sm btn-primary" data-action="hg.watch" data-code="' + esc(room.code) + '">👀 관전하기</button>' +
+        '<div class="room-card-actions">' +
+          '<button class="btn btn-sm btn-primary" data-action="hg.watch" data-code="' + esc(room.code) + '">👀 관전하기</button>' +
+          '<button class="btn btn-sm btn-warn" data-action="hg.resetRoom" data-code="' + esc(room.code) + '" data-name="' + esc(room.name) + '">🧹 방 초기화</button>' +
+        '</div>' +
       '</div>'
     );
   }
@@ -609,7 +742,8 @@
         '<p class="hint">' +
           '· 관전 화면에서는 카드와 종을 누를 수 없으니 안심하고 화면을 띄워 두세요.<br>' +
           '· [합계 보기]를 켜면 과일별 합계가 표시되어 학생들이 세는 방법을 익힐 수 있습니다.<br>' +
-          '· 모둠 방이 부족하면 할리갈리 입장 화면에서 [새 방 만들기]로 방을 추가하세요.' +
+          '· 학생이 나가기를 누르거나 모두 나가면 모둠 방은 자동으로 대기 상태(0/4명)가 됩니다.<br>' +
+          '· 그래도 방이 막혀 있으면 카드의 [🧹 방 초기화]로 참가자를 정리하고 새로 시작할 수 있습니다.' +
         '</p>' +
       '</div>',
       'hg.teacher'
@@ -637,6 +771,7 @@
       if (!action) return;
       if (action.action === 'ring') game.ring(action.playerId, Date.now());
       else if (action.action === 'flip') game.flip(action.playerId, Date.now());
+      if (game.lastBell) playBellSound(game);
       if (game.status !== 'playing') stopBotLoop();
       if (screenName() === 'hg.bot') renderBot();
     }, 90);
@@ -660,6 +795,7 @@
       count: count
     };
     S.seenTop = {};
+    S.fx = { lastBellAt: null, freshAt: null, soundAt: null, kind: 'correct' };
     startBotLoop();
     renderBot();
   }
@@ -751,6 +887,16 @@
     BG.navigate('/halligalli/room/' + code);
   }
 
+  /** 방에서 실제로 나갑니다. (서버가 자리 정리 + 사람이 없으면 방 초기화) */
+  function doLeave() {
+    BG.net.send({ t: 'leave' });
+    S.room = null;
+    S.pendingJoin = null;
+    S.resumeSent = {};
+    clearSeat();
+    BG.navigate('/halligalli');
+  }
+
   BG.actions['hg.rules'] = function () { openRules(); };
 
   BG.actions['hg.hintToggle'] = function () {
@@ -758,8 +904,22 @@
     BG.render();
   };
 
+  BG.actions['hg.soundToggle'] = function () {
+    if (!BG.sound) return;
+    const on = BG.sound.toggle();
+    BG.ui.toast(on ? '종소리를 켰어요 🔔' : '종소리를 껐어요 🔕', on ? 'ok' : '');
+    BG.render();
+  };
+
   BG.actions['hg.enterGroup'] = function (el) {
     joinCode(String(el.getAttribute('data-code') || '').toUpperCase());
+  };
+
+  BG.actions['hg.reenter'] = function (el) {
+    const code = String(el.getAttribute('data-code') || '').toUpperCase();
+    if (!code) return;
+    BG.net.connect();
+    BG.navigate('/halligalli/room/' + code);
   };
 
   BG.actions['hg.enterByCode'] = function () {
@@ -808,18 +968,24 @@
     if (S.bot.active && screenName() === 'hg.bot') {
       const result = S.bot.game.flip('me', Date.now());
       if (!result.ok) BG.ui.toast(reasonMessage(result.reason), 'error');
+      else if (BG.sound) BG.sound.flip();
       if (S.bot.game.status !== 'playing') stopBotLoop();
       renderBot();
       return;
     }
+    if (BG.sound) BG.sound.flip();
     BG.net.send({ t: 'action', action: 'flip' });
   };
 
   BG.actions['hg.ring'] = function () {
     if (S.bot.active && screenName() === 'hg.bot') {
       const result = S.bot.game.ring('me', Date.now());
-      if (!result.ok) BG.ui.toast(reasonMessage(result.reason), 'error');
-      else if (!result.correct) BG.ui.toast('앗, 5개가 아니었어요! 카드 1장씩 잃었습니다.', 'error');
+      if (!result.ok) {
+        BG.ui.toast(reasonMessage(result.reason), 'error');
+      } else {
+        playBellSound(S.bot.game);
+        if (!result.correct) BG.ui.toast('앗, 5개가 아니었어요! 카드 1장씩 잃었습니다.', 'error');
+      }
       renderBot();
       return;
     }
@@ -859,16 +1025,65 @@
     BG.net.send({ t: 'option', endWhenTwo: !!el.checked });
   };
 
+  /* 나가기: 게임 중이면 한 번 확인한 뒤 실제로 퇴장합니다. */
   BG.actions['hg.leave'] = function () {
     if (S.bot.active && screenName() === 'hg.bot') {
       BG.actions['hg.botExit']();
       return;
     }
-    BG.net.send({ t: 'leave' });
-    S.room = null;
-    S.pendingJoin = null;
-    clearSeat();
-    BG.navigate('/halligalli');
+    const playing = S.room && S.room.game && S.room.game.status === 'playing';
+    if (playing && S.room.role === 'player') {
+      confirmDialog({
+        title: '방을 나갈까요?',
+        body: '지금 나가면 이 모둠 방에서 나가게 됩니다. 친구들이 남아 있으면 게임은 그대로 이어지고, 혼자 남았던 방은 대기 상태로 돌아갑니다.',
+        confirm: '나가기',
+        action: 'hg.confirmLeave',
+        danger: true
+      });
+      return;
+    }
+    doLeave();
+  };
+
+  BG.actions['hg.confirmLeave'] = function () {
+    BG.ui.closeModal();
+    doLeave();
+  };
+
+  /* 방장: 게임 종료 → 대기실로 */
+  BG.actions['hg.endGame'] = function () {
+    confirmDialog({
+      title: '게임을 종료할까요?',
+      body: '모둠 방이 대기실로 돌아갑니다. 봇은 그대로 남아 있어 바로 다음 판을 시작할 수 있어요.',
+      confirm: '게임 종료',
+      action: 'hg.confirmEndGame'
+    });
+  };
+
+  BG.actions['hg.confirmEndGame'] = function () {
+    BG.ui.closeModal();
+    BG.net.send({ t: 'endGame' });
+  };
+
+  /* 교사: 막힌 방 초기화 */
+  BG.actions['hg.resetRoom'] = function (el) {
+    const code = String(el.getAttribute('data-code') || '').toUpperCase();
+    const name = el.getAttribute('data-name') || '이 모둠';
+    S.pendingResetCode = code;
+    confirmDialog({
+      title: '방을 초기화할까요?',
+      body: name + ' 방의 참가자를 모두 내보내고 대기 상태(0/' + ((S.room && S.room.capacity) || 4) + '명)로 되돌립니다. 진행 중인 게임은 끝납니다.',
+      confirm: '초기화',
+      action: 'hg.confirmResetRoom',
+      danger: true
+    });
+  };
+
+  BG.actions['hg.confirmResetRoom'] = function () {
+    const code = S.pendingResetCode;
+    S.pendingResetCode = null;
+    BG.ui.closeModal();
+    if (code) BG.net.send({ t: 'resetRoom', gameId: 'halligalli', code: code });
   };
 
   BG.actions['hg.watch'] = function (el) {
@@ -899,6 +1114,20 @@
     }
   };
 
+  /* ---------------- 닉네임 아바타 미리보기 ---------------- */
+
+  document.addEventListener('input', function (event) {
+    const el = event.target;
+    if (!el || el.id !== 'nickname') return;
+    const preview = document.getElementById('my-avatar-preview');
+    if (preview) preview.innerHTML = avatar(el.value.trim() || '나', 'sm');
+  });
+
+  // 첫 터치/클릭에서 브라우저의 소리 재생 권한을 확보합니다.
+  document.addEventListener('pointerdown', function () {
+    if (BG.sound) BG.sound.unlock();
+  }, { once: true, passive: true });
+
   /* ---------------- 키보드 ---------------- */
 
   BG.keyHandlers.push(function (event) {
@@ -923,18 +1152,20 @@
 
   /* ---------------- 서버 메시지 ---------------- */
 
-  BG.net.on('welcome', function (msg) {
-    S.rooms = (msg.rooms || []).filter(function (r) { return r.gameId === 'halligalli'; });
+  function refreshRoomList() {
     const screen = screenName();
     if (screen === 'halligalli') renderEntry();
     else if (screen === 'hg.teacher') renderTeacher();
+  }
+
+  BG.net.on('welcome', function (msg) {
+    S.rooms = (msg.rooms || []).filter(function (r) { return r.gameId === 'halligalli'; });
+    refreshRoomList();
   });
 
   BG.net.on('rooms', function (msg) {
     S.rooms = (msg.rooms || []).filter(function (r) { return r.gameId === 'halligalli'; });
-    const screen = screenName();
-    if (screen === 'halligalli') renderEntry();
-    else if (screen === 'hg.teacher') renderTeacher();
+    refreshRoomList();
   });
 
   BG.net.on('joined', function (msg) {
@@ -952,6 +1183,7 @@
   BG.net.on('room', function (msg) {
     S.room = msg.room;
     S.role = msg.room.role;
+    if (msg.room.game) playBellSound(msg.room.game);
     const path = BG.currentPath();
     if (path.indexOf('/halligalli/room/') === 0) renderRoom([msg.room.code]);
     else if (path.indexOf('/halligalli/watch/') === 0) renderWatch([msg.room.code]);
@@ -961,8 +1193,25 @@
     BG.ui.toast(msg.name + ' 관전을 시작합니다.', 'ok');
   });
 
+  BG.net.on('room_reset', function (msg) {
+    BG.ui.toast(msg.message || '방이 초기화되었습니다.', 'ok');
+    const seat = getSeat();
+    if (seat && String(seat.code) === String(msg.code)) clearSeat();
+    S.room = null;
+    S.pendingJoin = null;
+    const screen = screenName();
+    if (screen === 'hg.room') BG.navigate('/halligalli');
+    else if (screen === 'hg.watch') {
+      if (msg.self) BG.actions['hg.watchBack']();
+      else BG.navigate('/halligalli');
+    } else {
+      BG.render();
+    }
+  });
+
   BG.net.on('action_result', function (msg) {
     if (msg && msg.ok === false && msg.message) BG.ui.toast(msg.message, 'error');
+    else if (msg && msg.ok === true && msg.message) BG.ui.toast(msg.message, 'ok');
   });
 
   BG.net.on('error', function (msg) {

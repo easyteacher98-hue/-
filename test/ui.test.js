@@ -241,3 +241,119 @@ test('교사 관전 화면에 6개 모둠 현황이 보이고 관전 입장이 �
     await hub.close();
   }
 });
+
+test('대기방에서 모둠 목록으로 나갔다가 다시 들어가고, 방 나가기로 자리를 정리한다', async function () {
+  const hub = createHub({ groupCapacity: 4 });
+  const info = await hub.start(0, '127.0.0.1');
+  const dom = await openPage('http://127.0.0.1:' + info.port + '/');
+  const window = dom.window;
+  try {
+    await waitFor(function () { return window.document.querySelector('.game-card'); }, '포털');
+    window.location.hash = '#/halligalli';
+    await waitFor(function () { return window.document.querySelector('#nickname'); }, '닉네임 입력');
+
+    type(window, '#nickname', '다시들어가기');
+    const third = Array.from(window.document.querySelectorAll('.group-grid .group-card'))[2];
+    third.querySelector('[data-action="hg.enterGroup"]').click();
+    await waitFor(function () { return window.document.querySelector('.seat-list'); }, '대기방');
+    assert.ok(window.document.querySelector('[data-action="hg.leave"]'), '대기방에 방 나가기 버튼');
+
+    // 모둠 선택으로 돌아가도 자리는 남아 있고 '다시 들어가기'가 보인다
+    click(window, '.back-link');
+    await waitFor(function () { return window.document.querySelector('[data-action="hg.reenter"]'); }, '다시 들어가기 카드');
+    const mine = window.document.querySelector('.group-card.is-self');
+    assert.ok(mine, '내가 참여 중인 모둠 카드 표시');
+    assert.match(mine.textContent, /3모둠/);
+    assert.match(window.document.querySelector('.my-room-banner').textContent, /참여 중/);
+
+    // 다시 들어가기 → 대기방으로 복귀
+    click(window, '[data-action="hg.reenter"]');
+    await waitFor(function () { return window.document.querySelector('.seat-list'); }, '대기방 복귀');
+    assert.match(window.document.querySelector('.seat-list').textContent, /다시들어가기/);
+
+    // 방 나가기 → 자리 정리, 로비 카드가 0/4명
+    click(window, '[data-action="hg.leave"]');
+    await waitFor(function () { return window.document.querySelector('.group-grid'); }, '모둠 목록 복귀');
+    await waitFor(function () {
+      const cards = Array.from(window.document.querySelectorAll('.group-card'));
+      const card = cards.find(function (c) { return /3모둠/.test(c.textContent); });
+      return card && /0/.test(card.querySelector('.group-occ').textContent);
+    }, '자리 정리 반영');
+    assert.equal(window.document.querySelector('.group-card.is-self'), null, '내 자리 표시가 사라진다');
+
+    assert.equal(dom.__errors.length, 0, 'JS 오류: ' + dom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    window.close();
+    await hub.close();
+  }
+});
+
+test('게임판의 방 나가기 · 방장 게임 종료 버튼이 있고, 게임 종료를 누르면 대기실로 돌아온다', async function () {
+  const hub = createHub({ groupCapacity: 4 });
+  const info = await hub.start(0, '127.0.0.1');
+  const dom = await openPage('http://127.0.0.1:' + info.port + '/');
+  const window = dom.window;
+  try {
+    await waitFor(function () { return window.document.querySelector('.game-card'); }, '포털');
+    window.location.hash = '#/halligalli';
+    await waitFor(function () { return window.document.querySelector('#nickname'); }, '닉네임 입력');
+    type(window, '#nickname', '방장');
+    click(window, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return window.document.querySelector('.seat-list'); }, '대기방');
+
+    for (let i = 0; i < 3; i++) {
+      click(window, '[data-action="hg.addBot"]');
+      await sleep(120);
+    }
+    await waitFor(function () {
+      const btn = window.document.querySelector('[data-action="hg.start"]');
+      return btn && !btn.disabled;
+    }, '시작 버튼 활성화');
+    click(window, '[data-action="hg.start"]');
+    await waitFor(function () { return window.document.querySelector('.table'); }, '게임판');
+
+    assert.ok(window.document.querySelector('.board-tools [data-action="hg.leave"]'), '게임판 방 나가기 버튼');
+    const endBtn = window.document.querySelector('[data-action="hg.endGame"]');
+    assert.ok(endBtn, '방장에게 게임 종료 버튼');
+    assert.match(endBtn.textContent, /게임 종료/);
+
+    // 확인 모달 → 게임 종료 → 대기실
+    click(window, '[data-action="hg.endGame"]');
+    await waitFor(function () { return window.document.querySelector('.modal'); }, '종료 확인 모달');
+    assert.match(window.document.querySelector('.modal').textContent, /게임을 종료할까요/);
+    click(window, '[data-action="hg.confirmEndGame"]');
+    await waitFor(function () { return window.document.querySelector('.seat-list'); }, '대기실 복귀');
+    assert.match(window.document.body.textContent, /게임 준비/);
+    assert.equal(dom.__errors.length, 0, 'JS 오류: ' + dom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    window.close();
+    await hub.close();
+  }
+});
+
+test('교사 관전 화면에서 모둠 방을 초기화할 수 있다', async function () {
+  const hub = createHub({ groupCapacity: 4 });
+  const info = await hub.start(0, '127.0.0.1');
+  const dom = await openPage('http://127.0.0.1:' + info.port + '/');
+  const window = dom.window;
+  try {
+    await waitFor(function () { return window.document.querySelector('.game-card'); }, '포털');
+    window.location.hash = '#/halligalli/teacher';
+    await waitFor(function () { return window.document.querySelectorAll('.room-card').length === 6; }, '교사 대시보드');
+
+    const resetBtn = window.document.querySelector('.room-card [data-action="hg.resetRoom"]');
+    assert.ok(resetBtn, '방 초기화 버튼');
+    click(window, '.room-card [data-action="hg.resetRoom"]');
+    await waitFor(function () { return window.document.querySelector('.modal'); }, '초기화 확인 모달');
+    assert.match(window.document.querySelector('.modal').textContent, /초기화/);
+    click(window, '[data-action="hg.confirmResetRoom"]');
+    await waitFor(function () {
+      const toast = window.document.getElementById('toast');
+      return toast && /초기화/.test(toast.textContent);
+    }, '초기화 알림');
+    assert.equal(dom.__errors.length, 0, 'JS 오류: ' + dom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    window.close();
+    await hub.close();
+  }
+});
