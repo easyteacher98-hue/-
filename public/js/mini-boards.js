@@ -279,8 +279,8 @@
       '<rect x="2" y="2" width="96" height="96" rx="6" class="mg-yut-frame" />' +
       '<g class="mg-yut-lines">' + lines.join('') + '</g>' +
       '<g class="mg-yut-nodes">' + nodes.join('') + '</g>' +
-      '<text class="mg-yut-label" x="' + nodeXY(0).x + '" y="' + (nodeXY(0).y + 7) + '">출발</text>' +
-      '<text class="mg-yut-label" x="' + nodeXY(20).x + '" y="' + (nodeXY(20).y + 6) + '">가운데</text>' +
+      '<text class="mg-yut-label" x="' + (nodeXY(0).x + 9) + '" y="' + (nodeXY(0).y + 8.4) + '">출발</text>' +
+      '<text class="mg-yut-label" x="' + nodeXY(20).x + '" y="' + (nodeXY(20).y - 6.2) + '">가운데</text>' +
       '<g class="mg-yut-tokens">' + tokens.join('') + '</g>' +
     '</svg>';
   }
@@ -325,9 +325,9 @@
           });
           groups.push({ key: key, piece: piece, count: group.length });
         });
-        waiting.forEach(function (piece, i) {
-          groups.unshift({ key: 'wait' + i, piece: piece, count: 1, waiting: true });
-        });
+        if (waiting.length) {
+          groups.unshift({ key: 'wait', piece: waiting[0], count: 1, waiting: true, waitingCount: waiting.length });
+        }
         actionBox = '<div class="mg-move-box"><div class="mg-phase-title">옮길 말을 고르세요</div>' +
           '<div class="mg-move-grid">' + groups.map(function (g) {
             const from = g.piece.path === null ? '출발점' : g.piece.node + '번 자리';
@@ -337,7 +337,9 @@
               to = result.finished ? '완주 🎉' : result.toStart ? '출발점' : result.node + '번 자리' + (result.shortcut ? ' (지름길)' : '');
             }
             return '<button class="btn mg-move-btn" data-action="mini.move" data-piece="' + esc(g.piece.id) + '">' +
-              '<b>' + esc(from) + '</b>' + (g.count > 1 ? ' 말 ' + g.count + '개' : '') + ' → ' + esc(to) + '</button>';
+              '<b>' + esc(from) + '</b>' +
+              (g.waiting && g.waitingCount > 1 ? ' (남은 ' + g.waitingCount + '개 중 1개)' : (g.count > 1 ? ' 말 ' + g.count + '개' : '')) +
+              ' → ' + esc(to) + '</button>';
           }).join('') + '</div>' +
           '<p class="hint">말을 누르면 그 자리의 말이 함께 움직입니다. (업기)</p></div>';
       } else {

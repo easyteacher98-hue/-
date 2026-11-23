@@ -364,8 +364,8 @@
       this.disposed = false;
 
       this.theta = 0;
-      this.phi = 0.76;
-      this.radius = 10.2;
+      this.phi = 0.80;
+      this.radius = 11.8;
 
       this.scene = new THREE.Scene();
       this.scene.fog = new THREE.Fog(0x0d1728, 26, 46);
@@ -937,8 +937,8 @@
 
     resetCamera() {
       this.theta = 0;
-      this.phi = 0.76;
-      this.radius = 10.2;
+      this.phi = 0.80;
+      this.radius = 11.8;
       this.updateCamera();
     }
 

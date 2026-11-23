@@ -424,6 +424,8 @@
   /* ---------- 시작 ---------- */
   window.addEventListener('hashchange', function () {
     window.scrollTo(0, 0);
+    // 화면을 옮기면 이전 화면의 팝업(결과 모달 등)이 남지 않게 닫습니다.
+    ui.closeModal();
     BG.render();
   });
 
