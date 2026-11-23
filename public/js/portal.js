@@ -19,7 +19,9 @@
       players: '2~5명 · 모둠당 4명',
       status: 'ready',
       href: '#/halligalli',
-      action: '지금 플레이'
+      action: '지금 플레이',
+      grades: ['low', 'mid', 'high'],
+      mode: 'multi'
     },
     {
       id: 'bluemarble',
@@ -29,17 +31,69 @@
       players: '2~4명 · 모둠당 4명',
       status: 'ready',
       href: '#/bluemarble',
-      action: '지금 플레이'
+      action: '지금 플레이',
+      grades: ['mid', 'high'],
+      mode: 'multi'
     },
     {
-      id: 'yutnori',
-      title: '윷놀이',
+      id: 'streams',
+      title: '숫자 줄세우기',
       emoji: '🎯',
-      desc: '윷가락을 던져 말을 옮기는 우리나라 전통 보드게임. 모둠 대항전으로 준비하고 있습니다.',
-      players: '2~4팀',
-      status: 'coming',
-      href: null,
-      action: '준비 중'
+      desc: '같은 숫자를 모두 함께, 각자 20칸 트랙에 오름차순으로! 끊기지 않고 이어진 가장 긴 줄이 점수입니다.',
+      players: '1~4명 · 모둠당 4명',
+      status: 'ready',
+      href: '#/streams',
+      action: '지금 플레이',
+      grades: ['low', 'mid', 'high'],
+      mode: 'multi'
+    },
+    {
+      id: 'gomoku',
+      title: '오목',
+      emoji: '⚫',
+      desc: '15x15 오목판 1:1 대결. 가로·세로·대각선 5개를 먼저 이으면 승리! AI 봇과 혼자 연습할 수 있어요.',
+      players: '2명 · 모둠당 2명',
+      status: 'ready',
+      href: '#/gomoku',
+      action: '지금 플레이',
+      grades: ['mid', 'high'],
+      mode: 'multi'
+    },
+    {
+      id: 'liar',
+      title: '라이어 추리게임',
+      emoji: '🕵️',
+      desc: '제시어를 모르는 한 명(라이어)이 섞여 있어요. 친구들의 힌트를 듣고 투표로 라이어를 찾아내세요!',
+      players: '3~6명 · 모둠당 6명',
+      status: 'ready',
+      href: '#/liar',
+      action: '지금 플레이',
+      grades: ['mid', 'high'],
+      mode: 'multi'
+    },
+    {
+      id: 'yut',
+      title: '전통 윷놀이',
+      emoji: '🪵',
+      desc: '도·개·걸·윷·모! 말을 업고, 잡고, 지름길로 달려 먼저 완주하세요. 우리나라 전통 보드게임.',
+      players: '2~4명 · 모둠당 4명',
+      status: 'ready',
+      href: '#/yut',
+      action: '지금 플레이',
+      grades: ['low', 'mid', 'high'],
+      mode: 'multi'
+    },
+    {
+      id: 'puzzle',
+      title: '1인용 미니 퍼즐',
+      emoji: '🧩',
+      desc: '2048과 짝맞추기. 짝을 기다리거나 혼자 연습할 때 바로 즐겨요. 최고점은 이 기기에 저장됩니다.',
+      players: '1명 · 혼자서',
+      status: 'ready',
+      href: '#/puzzle',
+      action: '혼자 하기',
+      grades: ['low', 'mid', 'high'],
+      mode: 'solo'
     },
     {
       id: 'more',
@@ -49,9 +103,29 @@
       players: '확장 예정',
       status: 'soon',
       href: null,
-      action: '준비 중'
+      action: '준비 중',
+      grades: [],
+      mode: 'multi'
     }
   ];
+
+  const GRADE_FILTERS = [
+    { id: 'all', label: '전체' },
+    { id: 'low', label: '저학년 추천 (1~2학년)' },
+    { id: 'mid', label: '중학년 추천 (3~4학년)' },
+    { id: 'high', label: '고학년 추천 (5~6학년)' },
+    { id: 'solo', label: '1인용' }
+  ];
+
+  const GRADE_LABEL = { low: '저학년', mid: '중학년', high: '고학년' };
+
+  const F = { filter: 'all' };
+
+  function matchesFilter(game, filter) {
+    if (filter === 'all') return true;
+    if (filter === 'solo') return game.mode === 'solo';
+    return (game.grades || []).indexOf(filter) !== -1;
+  }
 
   /* ---------------- 공통 ---------------- */
 
@@ -222,12 +296,23 @@
         '<span>학생에게는 반 코드나 링크만 알려 주세요.</span>' +
         '<span class="spacer"></span>' +
         '<a class="foot-link" href="#/">학생 입장 화면으로</a>' +
+        '<a class="foot-link admin-link" href="#/admin">📊 제작자 통계</a>' +
       '</div>';
 
     BG.ui.screen(html, 'teacher');
   }
 
   /* ---------------- 우리 반 게임 포털 ---------------- */
+
+  function gradeBadges(game) {
+    if (!game.grades || !game.grades.length) return '';
+    return '<span class="grade-badges">' +
+      (game.mode === 'solo' ? '<span class="grade-badge solo">1인용</span>' : '') +
+      game.grades.map(function (g) {
+        return '<span class="grade-badge g-' + g + '">' + (GRADE_LABEL[g] || g) + '</span>';
+      }).join('') +
+    '</span>';
+  }
 
   function gameCard(game) {
     const playable = game.status === 'ready';
@@ -238,6 +323,7 @@
       '<div class="game-emoji">' + game.emoji + '</div>' +
       '<div class="game-name">' + esc(game.title) + '</div>' +
       '<div class="game-desc">' + esc(game.desc) + '</div>' +
+      gradeBadges(game) +
       (playable && BG.cards && game.id === 'halligalli'
         ? '<div class="hero-fruits" style="justify-content:flex-start;margin-top:-2px" aria-hidden="true">' +
             ['strawberry', 'banana', 'lime', 'plum'].map(function (id) { return BG.cards.fruitIcon(id); }).join('') +
@@ -258,20 +344,36 @@
 
     if (playable) {
       return (
-        '<a class="game-card playable" href="' + game.href + '">' +
+        '<a class="game-card playable game-' + game.id + '" href="' + game.href + '" ' +
+          'data-grades="' + (game.grades || []).join(' ') + '" data-mode="' + (game.mode || 'multi') + '">' +
           '<div class="row" style="justify-content:space-between">' + badge + '</div>' +
           inner +
         '</a>'
       );
     }
-    return '<div class="game-card coming">' + badge + inner + '</div>';
+    return '<div class="game-card coming game-' + game.id + '" data-grades="' + (game.grades || []).join(' ') + '">' + badge + inner + '</div>';
+  }
+
+  function filterTabs() {
+    return '<div class="game-filters" role="tablist" aria-label="학년별 게임 추천">' +
+      GRADE_FILTERS.map(function (f) {
+        return '<button class="filter-tab' + (F.filter === f.id ? ' is-active' : '') + '" role="tab" ' +
+          'aria-selected="' + (F.filter === f.id ? 'true' : 'false') + '" ' +
+          'data-action="portal.filter" data-filter="' + f.id + '">' + esc(f.label) + '</button>';
+      }).join('') +
+    '</div>';
+  }
+
+  function filteredGames() {
+    return BG.portalGames.filter(function (g) { return matchesFilter(g, F.filter); });
   }
 
   function classPortalHtml() {
     const code = BG.state.classCode;
     const name = BG.className();
     const connected = BG.net.connected;
-    const games = BG.portalGames.map(gameCard).join('');
+    const games = filteredGames().map(gameCard).join('') ||
+      '<div class="empty">이 조건에 맞는 게임이 아직 없어요. 다른 탭을 눌러 보세요.</div>';
     const link = BG.classLink(code);
 
     const html =
@@ -297,8 +399,9 @@
             '<a href="#/halligalli/bot">🤖 AI 봇 연습</a>은 그대로 됩니다. (선생님은 서버가 켜진 주소로 접속해 주세요.)</div>'
         : '') +
 
-      '<h2 class="panel-title" style="margin:18px 0 12px">게임 선택</h2>' +
-      '<div class="game-grid">' + games + '</div>' +
+      '<h2 class="panel-title" style="margin:18px 0 10px">게임 선택 <span class="hint">' + filteredGames().length + '개</span></h2>' +
+      filterTabs() +
+      '<div class="game-grid" style="margin-top:12px">' + games + '</div>' +
 
       '<div class="class-lower">' +
         ((BG.hg && BG.hg.classRankingHtml) ? BG.hg.classRankingHtml(10) : '') +
@@ -318,7 +421,7 @@
       '<section class="panel" style="margin-top:22px">' +
         '<div class="panel-title">🎮 입장 방법</div>' +
         '<ol class="rules-list">' +
-          '<li>원하는 게임(과일 딩동 · 전국여행 마블)을 고르고 <b>출석번호(1~99)</b>와 <b>이름</b>을 입력합니다.</li>' +
+          '<li>원하는 게임(과일 딩동 · 전국여행 마블 · 숫자 줄세우기 · 오목 · 라이어 · 윷놀이)을 고르고 <b>출석번호(1~99)</b>와 <b>이름</b>을 입력합니다.</li>' +
           '<li>자기 <b>모둠(1~6모둠)</b>을 누르면 바로 그 모둠 방으로 들어가요.</li>' +
           '<li>모둠원이 모이면 방장이 <b>게임 시작</b>을 누릅니다.</li>' +
         '</ol>' +
@@ -429,6 +532,13 @@
     if (!needServer()) return;
     S.pendingClass = code;
     BG.net.send({ t: 'classInfo', code: code });
+  };
+
+  BG.actions['portal.filter'] = function (el) {
+    const next = el.getAttribute('data-filter') || 'all';
+    if (F.filter === next) return;
+    F.filter = next;
+    classPortalHtml();
   };
 
   BG.actions['portal.copyClassLink'] = function () {

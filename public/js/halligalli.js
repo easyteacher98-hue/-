@@ -88,7 +88,7 @@
     const list = (S.stats || []).slice(0, limit || 10);
     const myNo = validNumber(BG.state.number);
     const head = '<div class="panel-title">🏆 우리 반 포인트 랭킹' +
-      (bare ? '' : ' <span class="hint">(이번 수업 기록 · 서버를 다시 켜면 초기화)</span>') + '</div>';
+      (bare ? '' : ' <span class="hint">(우리 반 누적 기록 · 서버에 저장)</span>') + '</div>';
     let body;
     if (!list.length) {
       body = '<p class="hint">아직 기록이 없어요. 한 판이 끝나면 1등 +100P, 2등 +50P, 3등 +30P, 나머지 +10P가 쌓입니다.</p>';

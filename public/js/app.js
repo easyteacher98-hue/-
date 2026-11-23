@@ -339,6 +339,8 @@
     const handler = BG.actions[action];
     if (!handler) return;
     if (target.disabled) return;
+    // <select> 는 값이 바뀔 때(change) 처리합니다. 클릭 시점의 값은 아직 이전 값입니다.
+    if (target.tagName === 'SELECT') return;
     // 체크박스/라디오는 기본 동작(토글)을 막지 않습니다.
     if (target.tagName !== 'INPUT') event.preventDefault();
     try {
@@ -355,6 +357,21 @@
     if (event && event.target !== el) return;
     ui.closeModal();
   };
+
+  /* <select data-action="..."> 는 값이 바뀌는 순간 처리합니다. */
+  document.addEventListener('change', function (event) {
+    const el = event.target;
+    if (!el || el.tagName !== 'SELECT') return;
+    const target = el.closest('[data-action]');
+    if (!target) return;
+    const handler = BG.actions[target.getAttribute('data-action')];
+    if (!handler) return;
+    try {
+      handler(target, event);
+    } catch (err) {
+      console.error('[change] 오류:', err);
+    }
+  });
 
   /* ---------- 입력 ---------- */
   document.addEventListener('input', function (event) {

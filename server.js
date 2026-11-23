@@ -130,6 +130,7 @@ function safeEqualHex(a, b) {
 
 const REDIS_CLASSES_KEY = 'halligalli:classes';
 const REDIS_CLASS_STATS_KEY = 'halligalli:classStats';
+const REDIS_GAME_STATS_KEY = 'halligalli:gameStats';
 const REDIS_TIMEOUT_MS = 5000;
 
 /**
@@ -235,7 +236,9 @@ function createHub(options) {
     // 반 목록을 파일에 남겨 서버가 다시 켜져도 우리 반 링크가 살아 있게 합니다.
     storePath: opts.store === false
       ? null
-      : (opts.storePath || process.env.CLASS_STORE || path.join(__dirname, 'data', 'classes.json'))
+      : (opts.storePath || process.env.CLASS_STORE || path.join(__dirname, 'data', 'classes.json')),
+    // 제작자 전용 통계 페이지(#/admin)의 암호. 교사 개설 암호와 같은 값을 씁니다.
+    adminCode: String(opts.adminCode || process.env.TEACHER_CREATE_CODE || 'easy')
   };
 
   /* Upstash Redis 는 환경변수가 있을 때만 켜집니다. (opts.redis === false 로 끌 수 있음) */
@@ -254,6 +257,8 @@ function createHub(options) {
   const classes = new Map();      // 반 코드 -> { code, name, pinHash, pinSalt, createdAt }
   const classTokens = new Map();  // 반 코드 -> Set(교사 토큰)
   const classScores = new Map();  // 반 코드 -> Map(번호 -> { number, plays, wins, points })
+  const gamePlays = new Map();    // 게임 id -> 끝난 판 수 (제작자 통계)
+  const soloBests = new Map();    // `반|게임|번호` -> 최고 점수 (1인용 퍼즐)
   const connections = new Set();  // 모든 ws
   const overviewSubs = new Set(); // 교사 관전(요약 구독)
   let overviewTimer = null;
@@ -353,7 +358,81 @@ function createHub(options) {
     return out.map(function (rec, i) { return Object.assign({ rank: i + 1 }, rec); });
   }
 
+  /** 제작자 전용 통계 – 반·학생·플레이·게임 인기 순위 */
+  function adminOverview() {
+    const classRows = [];
+    let totalStudents = 0;
+    let totalPlays = 0;
+    let totalPoints = 0;
+    for (const cls of classes.values()) {
+      if (cls.code === DEFAULT_CLASS_CODE) continue;
+      const scores = classScoreList(cls.code);
+      let plays = 0;
+      let points = 0;
+      scores.forEach(function (rec) {
+        plays += rec.plays;
+        points += rec.points;
+      });
+      totalStudents += scores.length;
+      totalPlays += plays;
+      totalPoints += points;
+      classRows.push({
+        code: cls.code,
+        name: cls.name,
+        students: scores.length,
+        plays: plays,
+        points: points,
+        createdAt: cls.createdAt
+      });
+    }
+    classRows.sort(function (a, b) {
+      if (b.plays !== a.plays) return b.plays - a.plays;
+      return String(a.code).localeCompare(String(b.code));
+    });
+    const gameRows = games.list().map(function (g) {
+      return {
+        gameId: g.id,
+        title: g.title,
+        emoji: g.emoji,
+        mode: g.mode || 'multi',
+        plays: gamePlays.get(g.id) || 0
+      };
+    });
+    gameRows.sort(function (a, b) {
+      if (b.plays !== a.plays) return b.plays - a.plays;
+      return String(a.gameId).localeCompare(String(b.gameId));
+    });
+    let openRooms = 0;
+    let playingRooms = 0;
+    for (const room of rooms.values()) {
+      if (room.seats.length) openRooms += 1;
+      if (room.game && room.game.status === 'playing') playingRooms += 1;
+    }
+    let totalPlayed = 0;
+    for (const n of gamePlays.values()) totalPlayed += n;
+    return {
+      totals: {
+        classes: classRows.length,
+        students: totalStudents,
+        plays: totalPlayed,
+        points: totalPoints,
+        openRooms: openRooms,
+        playingRooms: playingRooms
+      },
+      classes: classRows,
+      games: gameRows,
+      persistence: settings.persistence,
+      updatedAt: Date.now()
+    };
+  }
+
   /** 한 판이 끝났을 때 순위대로 승수·포인트를 적립하고 결과 메시지를 돌려줍니다. */
+  function bumpGamePlay(gameId) {
+    if (!gameId) return;
+    gamePlays.set(gameId, (gamePlays.get(gameId) || 0) + 1);
+    schedulePersist();
+  }
+
   function recordGameResult(room) {
     const game = room.game;
     if (!game || game.status !== 'finished' || room.resultRecorded) return null;
@@ -362,6 +441,7 @@ function createHub(options) {
       return null;
     }
     room.resultRecorded = true;
+    bumpGamePlay(room.gameId);
 
     const ranking = game.ranking();
     const map = scoreMap(room.classCode);
@@ -448,6 +528,34 @@ function createHub(options) {
       stats[code] = list;
     }
     return { version: CLASS_STORE_VERSION, stats: stats };
+  }
+
+  /** 게임별 플레이 수·1인용 최고점 (제작자 통계용) */
+  function gameStatsData() {
+    const plays = {};
+    for (const entry of gamePlays) plays[entry[0]] = entry[1];
+    const bests = {};
+    for (const entry of soloBests) bests[entry[0]] = entry[1];
+    return { version: 1, plays: plays, bests: bests };
+  }
+
+  function loadGameStats(data) {
+    if (!data || typeof data !== 'object') return 0;
+    let loaded = 0;
+    const plays = data.plays && typeof data.plays === 'object' ? data.plays : {};
+    for (const key of Object.keys(plays)) {
+      const n = Math.floor(Number(plays[key]) || 0);
+      if (!key || n <= 0) continue;
+      gamePlays.set(String(key), Math.max(gamePlays.get(String(key)) || 0, n));
+      loaded += 1;
+    }
+    const bests = data.bests && typeof data.bests === 'object' ? data.bests : {};
+    for (const key of Object.keys(bests)) {
+      const n = Math.floor(Number(bests[key]) || 0);
+      if (!key || n <= 0) continue;
+      soloBests.set(String(key), Math.max(soloBests.get(String(key)) || 0, n));
+    }
+    return loaded;
   }
 
   /**
@@ -565,10 +673,12 @@ function createHub(options) {
   async function doHydrate() {
     const rows = await redis.pipeline([
       ['GET', REDIS_CLASSES_KEY],
-      ['GET', REDIS_CLASS_STATS_KEY]
+      ['GET', REDIS_CLASS_STATS_KEY],
+      ['GET', REDIS_GAME_STATS_KEY]
     ]);
     const classesRaw = rows && rows[0] ? rows[0].result : null;
     const statsRaw = rows && rows[1] ? rows[1].result : null;
+    const gameRaw = rows && rows[2] ? rows[2].result : null;
 
     let classesData = null;
     let statsData = null;
@@ -586,9 +696,18 @@ function createHub(options) {
         console.warn('[hub] Upstash Redis의 반별 기록을 읽지 못했습니다. (형식 오류)');
       }
     }
+    let gamesData = null;
+    if (gameRaw) {
+      try {
+        gamesData = JSON.parse(String(gameRaw));
+      } catch (err) {
+        console.warn('[hub] Upstash Redis의 게임 통계를 읽지 못했습니다. (형식 오류)');
+      }
+    }
 
     const addedClasses = classesData ? loadClassList(classesData, { override: true }) : 0;
     const loadedStats = statsData ? loadClassStats(statsData) : 0;
+    if (gamesData) loadGameStats(gamesData);
     if (addedClasses || loadedStats) {
       console.log('[hub] Upstash Redis에서 복원 – 반 ' + addedClasses + '개, 반별 기록 ' + loadedStats + '건');
       initRoomsForMissingClasses();
@@ -631,7 +750,8 @@ function createHub(options) {
       }
       return redis.pipeline([
         ['SET', REDIS_CLASSES_KEY, JSON.stringify(classStoreData())],
-        ['SET', REDIS_CLASS_STATS_KEY, JSON.stringify(classStatsData())]
+        ['SET', REDIS_CLASS_STATS_KEY, JSON.stringify(classStatsData())],
+        ['SET', REDIS_GAME_STATS_KEY, JSON.stringify(gameStatsData())]
       ]).then(function () {
         if (persistFailStreak) console.log('[hub] Upstash Redis 저장이 다시 성공했습니다.');
         persistFailStreak = 0;
@@ -708,6 +828,7 @@ function createHub(options) {
       game: null,
       endWhenTwo: false,
       rounds: 15,
+      options: {},
       botTimer: null,
       lastEvent: '대기 중',
       resultRecorded: false,
@@ -786,7 +907,7 @@ function createHub(options) {
       }
       const action = room.gameModule.botTick(current, Date.now());
       if (!action) return;
-      const result = room.gameModule.applyAction(current, action.playerId, action.action, null, Date.now());
+      const result = room.gameModule.applyAction(current, action.playerId, action.action, action.payload || null, Date.now());
       if (result && result.ok) {
         const last = current.log[current.log.length - 1];
         touch(room, last ? last.text : null);
@@ -821,6 +942,7 @@ function createHub(options) {
       hostId: room.hostId,
       endWhenTwo: room.endWhenTwo,
       rounds: room.rounds,
+      options: Object.assign({}, room.options || {}),
       youId: viewerId || null,
       role: role || 'lobby',
       youAreHost: !!viewerId && viewerId === room.hostId,
@@ -1171,7 +1293,7 @@ function createHub(options) {
     stopBotLoop(room);
     room.game = room.gameModule.createGame(
       room.seats.map(function (s) { return { id: s.id, name: s.name, number: s.number, isBot: s.isBot }; }),
-      { endWhenTwo: room.endWhenTwo, maxRounds: room.rounds }
+      { endWhenTwo: room.endWhenTwo, maxRounds: room.rounds, options: Object.assign({}, room.options || {}) }
     );
     room.finishedAt = null;
     room.resultRecorded = false;
@@ -1313,6 +1435,70 @@ function createHub(options) {
     broadcastOverview();
   }
 
+  /** 1인용 퍼즐 결과: 최고점을 갱신하면 포인트를 조금 주고, 게임 인기 통계에 더합니다. */
+  function soloResultFor(ws, msg) {
+    const gameId = String(msg.gameId || '');
+    if (!games.solo(gameId)) return sendError(ws, '기록할 수 없는 게임입니다.', 'bad_game');
+    const classCode = resolveClassFor(ws, msg.classCode);
+    if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
+    const number = sanitizeNumber(msg.number);
+    if (number === null) return sendError(ws, '출석번호를 입력해 주세요.', 'bad_number');
+    const studentName = sanitizeStudentName(msg.studentName || '');
+    const score = Math.max(0, Math.min(1000000, Math.round(Number(msg.score) || 0)));
+    const key = classCode + '|' + gameId + '|' + number;
+    const prev = soloBests.get(key) || 0;
+    const isBest = score > prev;
+    if (isBest) soloBests.set(key, score);
+    bumpGamePlay(gameId);
+
+    const map = scoreMap(classCode);
+    const rec = map.get(number) || { number: number, name: '', plays: 0, wins: 0, points: 0 };
+    if (studentName) rec.name = studentName;
+    rec.plays += 1;
+    let gain = 0;
+    if (isBest && score > 0) {
+      gain = Math.min(50, Math.max(5, Math.round(score / 200)));
+      rec.points += gain;
+    }
+    map.set(number, rec);
+    schedulePersist();
+
+    const stats = classScoreList(classCode);
+    send(ws, {
+      t: 'solo_result',
+      ok: true,
+      gameId: gameId,
+      classCode: classCode,
+      number: number,
+      score: score,
+      best: soloBests.get(key) || score,
+      isBest: isBest,
+      gain: gain,
+      stats: stats,
+      recordedAt: Date.now()
+    });
+    for (const other of connections) {
+      if (other === ws) continue;
+      if (other.meta.classCode !== classCode) continue;
+      send(other, { t: 'class_stats', classCode: classCode, stats: stats });
+    }
+  }
+
+  /** 제작자 통계 요청 (암호 확인) */
+  function adminStatsFor(ws, msg) {
+    const code = String((msg && msg.code) || '');
+    if (ws.meta.adminFails >= 5) {
+      return send(ws, { t: 'admin_stats', ok: false, error: 'too_many_tries' });
+    }
+    if (!code || code !== settings.adminCode) {
+      ws.meta.adminFails = (ws.meta.adminFails || 0) + 1;
+      return send(ws, { t: 'admin_stats', ok: false, error: 'bad_code' });
+    }
+    ws.meta.adminFails = 0;
+    ws.meta.admin = true;
+    send(ws, { t: 'admin_stats', ok: true, data: adminOverview() });
+  }
+
   /** 반 코드 확인 (학생 입장 전 존재 여부) — 이름만 돌려주고 PIN 정보는 주지 않습니다. */
   function classInfoFor(ws, msg) {
     const cls = getClass(msg.code);
@@ -1433,6 +1619,10 @@ function createHub(options) {
         return enterClassFor(ws, msg);
       case 'classAuth':
         return authClassFor(ws, msg);
+      case 'soloResult':
+        return soloResultFor(ws, msg);
+      case 'adminStats':
+        return adminStatsFor(ws, msg);
       case 'overview': {
         overviewSubs.add(ws);
         if (!ws.meta.room) ws.meta.role = 'teacher';
@@ -1507,6 +1697,19 @@ function createHub(options) {
         if (msg.rounds !== undefined) {
           const rounds = Number(msg.rounds);
           if (Number.isInteger(rounds) && rounds >= 3 && rounds <= 30) room.rounds = rounds;
+        }
+        // 게임별 설정 (라이어 주제 · 윷 말 개수)
+        if (msg.category !== undefined) {
+          const category = String(msg.category || '').trim().slice(0, 20);
+          room.options = room.options || {};
+          room.options.category = category || null;
+        }
+        if (msg.pieces !== undefined) {
+          const pieces = Number(msg.pieces);
+          if (Number.isInteger(pieces) && pieces >= 2 && pieces <= 4) {
+            room.options = room.options || {};
+            room.options.pieces = pieces;
+          }
         }
         broadcastRoom(room);
         return;
@@ -1605,6 +1808,23 @@ function createHub(options) {
       }));
       return;
     }
+    // 제작자 전용 통계 (암호가 맞을 때만). 통계 화면(#/admin)과 확인용 API 가 함께 씀니다.
+    if (pathname === '/api/admin') {
+      let code = '';
+      try {
+        code = String(new URL(req.url, 'http://localhost').searchParams.get('code') || '');
+      } catch (err) {
+        code = '';
+      }
+      if (!code || code !== settings.adminCode) {
+        res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ ok: false, error: 'bad_code' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, data: adminOverview() }));
+      return;
+    }
     // 우리 반 코드가 살아 있는지 한눈에 확인할 때 쓰는 읽기 전용 API (PIN 정보는 내보내지 않음)
     const classMatch = /^\/api\/classes\/([A-Za-z0-9]{4,8})$/.exec(pathname);
     if (classMatch) {
@@ -1646,6 +1866,8 @@ function createHub(options) {
       teacher: false,
       teacherToken: null,
       failedPin: 0,
+      adminFails: 0,
+      admin: false,
       id: 'c' + nextId()
     };
     ws.isAlive = true;
@@ -1744,7 +1966,9 @@ function createHub(options) {
     getRoom: getRoom,
     getClass: getClass,
     isTeacherToken: isTeacherToken,
-    classScores: classScoreList
+    classScores: classScoreList,
+    adminOverview: adminOverview,
+    gamePlays: gamePlays
   };
 }
 

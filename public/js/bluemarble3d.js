@@ -107,107 +107,113 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
+    const baseColor = tile.color || '#c9a273';
+
     ctx.save();
     ctx.translate(S / 2, S / 2);
     ctx.rotate(side * Math.PI / 2);
     ctx.translate(-S / 2, -S / 2);
 
-    const baseColor = tile.color || '#e8d7c4';
-    ctx.fillStyle = '#fffdf7';
-    ctx.fillRect(0, 0, S, S);
-    const grad = ctx.createLinearGradient(0, 0, 0, S);
-    grad.addColorStop(0, tint(baseColor, 0.62));
-    grad.addColorStop(0.62, '#fffaf0');
-    grad.addColorStop(1, '#fff4e2');
-    ctx.fillStyle = grad;
+    // 바깥 테두리 (진한 남색) — 파스텔 배경 위에서도 칸이 또렷하게 보이도록
+    ctx.fillStyle = '#101a2b';
     ctx.fillRect(0, 0, S, S);
 
-    // 테두리 (지역 색)
-    ctx.strokeStyle = tint(baseColor, 0.15);
-    ctx.lineWidth = 7;
-    ctx.strokeRect(3.5, 3.5, S - 7, S - 7);
+    // 아이보리 카드
+    const card = ctx.createLinearGradient(0, 0, 0, S);
+    card.addColorStop(0, '#fffdf6');
+    card.addColorStop(1, '#f7eedd');
+    ctx.fillStyle = card;
+    ctx.fillRect(7, 7, S - 14, S - 14);
+
+    // 지역 색 띠 (굵고 선명하게)
+    ctx.fillStyle = baseColor;
+    ctx.fillRect(7, 7, S - 14, 30);
+    ctx.fillStyle = 'rgba(16, 26, 43, 0.28)';
+    ctx.fillRect(7, 35, S - 14, 3);
 
     // 소유자 표시 띠
     if (ownerPlayer) {
       ctx.fillStyle = colorForPlayer(ownerPlayer);
-      ctx.fillRect(0, 0, S, 16);
-    } else {
-      ctx.fillStyle = tint(baseColor, 0.35);
-      ctx.fillRect(0, 0, S, 10);
+      ctx.fillRect(7, S - 20, S - 14, 13);
     }
 
     const name = String(tile.name || '');
-    const centerY = 108;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
     if (tile.type === BM.TILE_TYPES.CITY) {
-      ctx.fillStyle = '#3d2f26';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '700 ' + (name.length >= 3 ? 52 : 60) + 'px "Jua", "Gowun Dodum", "Malgun Gothic", sans-serif';
-      ctx.fillText(name, S / 2, centerY - 12);
+      ctx.fillStyle = '#141d2c';
+      ctx.font = '700 ' + (name.length >= 4 ? 46 : name.length === 3 ? 54 : 62) + 'px "Jua", "Gowun Dodum", "Malgun Gothic", sans-serif';
+      ctx.fillText(name, S / 2, 96);
 
-      ctx.font = '600 36px "Gowun Dodum", "Malgun Gothic", sans-serif';
-      ctx.fillStyle = '#7a6455';
-      ctx.fillText(BM.shortMoney(tile.price), S / 2, centerY + 52);
+      // 가격 (진한 알약)
+      const priceText = BM.shortMoney(tile.price);
+      ctx.font = '700 34px "Gowun Dodum", "Malgun Gothic", sans-serif';
+      const w = ctx.measureText(priceText).width + 34;
+      ctx.fillStyle = '#101a2b';
+      roundedRect(ctx, S / 2 - w / 2, 132, w, 44, 22);
+      ctx.fill();
+      ctx.fillStyle = '#ffe9b0';
+      ctx.fillText(priceText, S / 2, 155);
 
       // 건물 단계
-      const levelText = BM.BUILD_NAMES[level] || '땅';
-      ctx.font = '600 30px "Gowun Dodum", "Malgun Gothic", sans-serif';
-      ctx.fillStyle = level === 3 ? '#b57a12' : level > 0 ? '#4d7d5f' : '#a99a8b';
-      ctx.fillText(level === 3 ? '★ 호텔 ★' : levelText, S / 2, 214);
+      const levelText = level === 3 ? '★ 호텔 ★' : (BM.BUILD_NAMES[level] || '땅');
+      ctx.font = '700 29px "Gowun Dodum", "Malgun Gothic", sans-serif';
+      ctx.fillStyle = level === 3 ? '#b57a12' : level > 0 ? '#256b47' : '#8d8172';
+      ctx.fillText(levelText, S / 2, 196);
 
       if (ownerPlayer) {
         const label = ownerPlayer.number !== null && ownerPlayer.number !== undefined
           ? ownerPlayer.number + '번'
           : ownerPlayer.name;
         ctx.fillStyle = colorForPlayer(ownerPlayer);
-        roundedRect(ctx, S / 2 - 52, S - 34, 104, 30, 15);
+        roundedRect(ctx, S / 2 - 56, 208, 112, 28, 14);
         ctx.fill();
         ctx.fillStyle = '#fff';
-        ctx.font = '700 20px "Jua", "Gowun Dodum", sans-serif';
-        ctx.fillText(label, S / 2, S - 18);
+        ctx.font = '700 21px "Jua", "Gowun Dodum", sans-serif';
+        ctx.fillText(label, S / 2, 223);
       } else {
-        ctx.fillStyle = '#9b8a7b';
-        ctx.font = '600 19px "Gowun Dodum", sans-serif';
-        ctx.fillText('매입 가능', S / 2, S - 18);
+        ctx.fillStyle = '#7d6a56';
+        ctx.font = '700 19px "Gowun Dodum", sans-serif';
+        ctx.fillText('매입 가능', S / 2, 216);
       }
     } else {
-      // 특수 칸
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#3d2f26';
-      ctx.font = '700 ' + (name.length >= 4 ? 44 : 52) + 'px "Jua", "Gowun Dodum", "Malgun Gothic", sans-serif';
-      ctx.fillText(name, S / 2, 150);
-      ctx.font = '500 24px "Gowun Dodum", "Malgun Gothic", sans-serif';
-      ctx.fillStyle = '#7a6455';
+      ctx.fillStyle = '#141d2c';
+      ctx.font = '700 ' + (name.length >= 4 ? 42 : 50) + 'px "Jua", "Gowun Dodum", "Malgun Gothic", sans-serif';
+      ctx.fillText(name, S / 2, 158);
       const desc = String(tile.desc || '');
-      if (desc) ctx.fillText(desc, S / 2, 198);
+      if (desc) {
+        ctx.font = '600 22px "Gowun Dodum", "Malgun Gothic", sans-serif';
+        ctx.fillStyle = '#6d5c49';
+        ctx.fillText(desc, S / 2, 198);
+      }
 
-      if (tile.type === BM.TILE_TYPES.GOLDEN) drawKey(ctx, 128, 82, '#d8a01f');
+      const iconY = 88;
+      if (tile.type === BM.TILE_TYPES.GOLDEN) drawKey(ctx, 128, iconY - 18, '#c98a10');
       else if (tile.type === BM.TILE_TYPES.TAX) {
-        ctx.fillStyle = '#c98d6b';
-        ctx.beginPath(); ctx.arc(128, 78, 30, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 38px "Jua", sans-serif'; ctx.fillText('₩', 128, 80);
+        ctx.fillStyle = '#b1553a';
+        ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '700 40px "Jua", sans-serif'; ctx.fillText('₩', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.BONUS) {
-        ctx.fillStyle = '#dfa62f';
-        ctx.beginPath(); ctx.arc(128, 78, 30, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 44px "Jua", sans-serif'; ctx.fillText('+', 128, 80);
+        ctx.fillStyle = '#b98314';
+        ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '700 46px "Jua", sans-serif'; ctx.fillText('+', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.START) {
-        ctx.fillStyle = '#f4775c';
-        ctx.beginPath(); ctx.arc(128, 76, 30, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 26px "Jua", sans-serif'; ctx.fillText('GO', 128, 78);
+        ctx.fillStyle = '#c2402c';
+        ctx.beginPath(); ctx.arc(128, iconY, 34, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '700 28px "Jua", sans-serif'; ctx.fillText('GO', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.ISLAND) {
-        ctx.fillStyle = '#7fb6c9';
-        ctx.beginPath(); ctx.arc(128, 76, 30, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 26px "Jua", sans-serif'; ctx.fillText('ISLE', 128, 78);
+        ctx.fillStyle = '#2e7f96';
+        ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '700 26px "Jua", sans-serif'; ctx.fillText('ISLE', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.TRAVEL) {
-        ctx.fillStyle = '#9b7fe0';
-        ctx.beginPath(); ctx.arc(128, 76, 30, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 26px "Jua", sans-serif'; ctx.fillText('AIR', 128, 78);
+        ctx.fillStyle = '#6247a8';
+        ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '700 26px "Jua", sans-serif'; ctx.fillText('AIR', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.PARK) {
-        ctx.fillStyle = '#4fb083';
-        ctx.beginPath(); ctx.arc(128, 76, 30, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 30px "Jua", sans-serif'; ctx.fillText('P', 128, 78);
+        ctx.fillStyle = '#2e7d5b';
+        ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '700 32px "Jua", sans-serif'; ctx.fillText('P', 128, iconY + 2);
       }
     }
 
@@ -220,51 +226,68 @@
     const canvas = makeCanvas(S);
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
-    const grad = ctx.createRadialGradient(S / 2, S / 2, 40, S / 2, S / 2, S * 0.72);
-    grad.addColorStop(0, '#eef9ec');
-    grad.addColorStop(0.62, '#d9eed6');
-    grad.addColorStop(1, '#c2e0c6');
+
+    // 깊은 남색 매트 + 금색 테두리 (아이보리 도시 카드가 확실히 떠 보이게)
+    const grad = ctx.createRadialGradient(S / 2, S / 2, 60, S / 2, S / 2, S * 0.78);
+    grad.addColorStop(0, '#1d3054');
+    grad.addColorStop(0.7, '#152441');
+    grad.addColorStop(1, '#0e1a2e');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, S, S);
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.strokeStyle = 'rgba(242, 197, 108, 0.5)';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(26, 26, S - 52, S - 52);
+    ctx.strokeStyle = 'rgba(242, 197, 108, 0.22)';
     ctx.lineWidth = 3;
-    for (let i = 1; i < 8; i++) {
+    ctx.strokeRect(44, 44, S - 88, S - 88);
+
+    // 은은한 격자
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+    ctx.lineWidth = 2;
+    for (let i = 1; i < 6; i++) {
       ctx.beginPath();
-      ctx.moveTo((S / 8) * i, 0);
-      ctx.lineTo((S / 8) * i, S);
+      ctx.moveTo((S / 6) * i, 60);
+      ctx.lineTo((S / 6) * i, S - 60);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(0, (S / 8) * i);
-      ctx.lineTo(S, (S / 8) * i);
+      ctx.moveTo(60, (S / 6) * i);
+      ctx.lineTo(S - 60, (S / 6) * i);
       ctx.stroke();
     }
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const title = label || '전국여행 마블';
-    let titleSize = 62;
+    let titleSize = 72;
     ctx.font = '700 ' + titleSize + 'px "Jua", "Gowun Dodum", sans-serif';
-    while (titleSize > 26 && ctx.measureText(title).width > S * 0.74) {
+    while (titleSize > 26 && ctx.measureText(title).width > S * 0.72) {
       titleSize -= 4;
       ctx.font = '700 ' + titleSize + 'px "Jua", "Gowun Dodum", sans-serif';
     }
-    ctx.fillStyle = '#6b5647';
-    ctx.fillText(title, S / 2, S / 2 - 30);
-    ctx.fillStyle = '#7d9c80';
-    ctx.font = '600 24px "Gowun Dodum", sans-serif';
-    ctx.fillText('3D BOARD GAME', S / 2, S / 2 + 36);
-    ctx.fillStyle = '#9ab39c';
-    ctx.font = '500 19px "Gowun Dodum", sans-serif';
-    ctx.fillText('보드게임천국', S / 2, S / 2 + 76);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = '#ffe6ad';
+    ctx.fillText(title, S / 2, S / 2 - 36);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = 'rgba(242, 197, 108, 0.85)';
+    ctx.fillRect(S / 2 - 90, S / 2 + 10, 180, 3);
+
+    ctx.fillStyle = '#cfe0ff';
+    ctx.font = '600 26px "Gowun Dodum", sans-serif';
+    ctx.fillText('3D BOARD GAME', S / 2, S / 2 + 44);
+    ctx.fillStyle = 'rgba(207, 224, 255, 0.62)';
+    ctx.font = '500 21px "Gowun Dodum", sans-serif';
+    ctx.fillText('보드게임천국', S / 2, S / 2 + 82);
 
     // 나침반
-    ctx.strokeStyle = 'rgba(120,160,130,0.5)';
+    ctx.strokeStyle = 'rgba(242, 197, 108, 0.6)';
     ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(S / 2, S / 2 + 150, 30, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(S / 2, S / 2 + 158, 30, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(S / 2, S / 2 + 124); ctx.lineTo(S / 2, S / 2 + 176);
-    ctx.moveTo(S / 2 - 10, S / 2 + 136); ctx.lineTo(S / 2, S / 2 + 124); ctx.lineTo(S / 2 + 10, S / 2 + 136);
+    ctx.moveTo(S / 2, S / 2 + 132); ctx.lineTo(S / 2, S / 2 + 184);
+    ctx.moveTo(S / 2 - 10, S / 2 + 144); ctx.lineTo(S / 2, S / 2 + 132); ctx.lineTo(S / 2 + 10, S / 2 + 144);
     ctx.stroke();
     return canvas;
   }
@@ -345,7 +368,7 @@
       this.radius = 11.8;
 
       this.scene = new THREE.Scene();
-      this.scene.fog = new THREE.Fog(0xfdf1e3, 28, 48);
+      this.scene.fog = new THREE.Fog(0x0d1728, 26, 46);
 
       const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : { width: 0, height: 0 };
       const width = Math.max(320, Math.floor(rect.width || container.clientWidth || 0));
@@ -389,9 +412,9 @@
 
     buildLights() {
       const THREE = this.THREE;
-      const hemi = new THREE.HemisphereLight(0xffffff, 0xb99f80, 0.62);
+      const hemi = new THREE.HemisphereLight(0xe8f0ff, 0x6b4426, 0.72);
       this.scene.add(hemi);
-      const sun = new THREE.DirectionalLight(0xfff0d6, 0.85);
+      const sun = new THREE.DirectionalLight(0xfff3da, 1.02);
       sun.position.set(9, 16, 10);
       sun.castShadow = true;
       sun.shadow.mapSize.set(1024, 1024);
@@ -403,7 +426,7 @@
       sun.shadow.camera.far = 40;
       sun.shadow.bias = -0.0008;
       this.scene.add(sun);
-      const fill = new THREE.DirectionalLight(0xdceaff, 0.22);
+      const fill = new THREE.DirectionalLight(0x9dc4ff, 0.34);
       fill.position.set(-8, 7, -6);
       this.scene.add(fill);
     }
@@ -412,13 +435,13 @@
 
     buildBoard() {
       const THREE = this.THREE;
-      const baseMat = new THREE.MeshLambertMaterial({ color: 0xe8c9a0 });
+      const baseMat = new THREE.MeshLambertMaterial({ color: 0x7a4b2a });
       const base = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.55, 8.6), baseMat);
       base.position.y = -0.5;
       base.receiveShadow = true;
       this.scene.add(base);
 
-      const edgeMat = new THREE.MeshLambertMaterial({ color: 0xc9a271 });
+      const edgeMat = new THREE.MeshLambertMaterial({ color: 0x4a2c17 });
       const edge = new THREE.Mesh(new THREE.BoxGeometry(8.9, 0.22, 8.9), edgeMat);
       edge.position.y = -0.82;
       this.scene.add(edge);
@@ -426,7 +449,7 @@
       const centerTexture = drawCenterTexture(this.options.title);
       const centerMat = centerTexture
         ? new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(centerTexture) })
-        : new THREE.MeshLambertMaterial({ color: 0xdcefdc });
+        : new THREE.MeshLambertMaterial({ color: 0x16243d });
       if (centerMat.map && THREE.sRGBEncoding !== undefined) centerMat.map.encoding = THREE.sRGBEncoding;
       const center = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.1, 6.0), centerMat);
       center.position.y = -0.2;
@@ -440,11 +463,11 @@
         const group = new THREE.Group();
         group.position.set(pos.x, -0.07, pos.z);
 
-        const sideMat = new THREE.MeshLambertMaterial({ color: 0xf0dcc0 });
+        const sideMat = new THREE.MeshLambertMaterial({ color: 0x1a2740 });
         const topTexture = drawTileTexture(tile, i, null, 0, pos.side);
         const topMat = topTexture
           ? new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(topTexture) })
-          : new THREE.MeshLambertMaterial({ color: 0xfff6e8 });
+          : new THREE.MeshLambertMaterial({ color: 0xfffdf6 });
         if (topMat.map && THREE.sRGBEncoding !== undefined) topMat.map.encoding = THREE.sRGBEncoding;
 
         const mesh = new THREE.Mesh(
