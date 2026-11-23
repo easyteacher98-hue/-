@@ -1,0 +1,339 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const WebSocket = require('ws');
+const { createHub } = require('../server.js');
+
+function connect(url) {
+  return new Promise(function (resolve, reject) {
+    const ws = new WebSocket(url);
+    const queue = [];
+    const used = new Set();
+
+    ws.on('message', function (raw) {
+      try { queue.push(JSON.parse(String(raw))); } catch (err) { /* ignore */ }
+    });
+    ws.on('error', reject);
+    ws.on('open', function () {
+      resolve({
+        ws: ws,
+        send: function (obj) { ws.send(JSON.stringify(obj)); },
+        close: function () { try { ws.close(); } catch (err) { /* ignore */ } },
+        raw: queue,
+        next: async function (pred, ms) {
+          const testFn = typeof pred === 'string' ? function (m) { return m.t === pred; } : pred;
+          const deadline = Date.now() + (ms || 3000);
+          while (Date.now() < deadline) {
+            for (let i = 0; i < queue.length; i++) {
+              if (!used.has(i) && testFn(queue[i])) {
+                used.add(i);
+                return queue[i];
+              }
+            }
+            await new Promise(function (r) { setTimeout(r, 15); });
+          }
+          throw new Error('메시지 대기 시간 초과. 최근: ' + JSON.stringify(queue.slice(-3)));
+        }
+      });
+    });
+  });
+}
+
+async function boot() {
+  const hub = createHub({ groupCapacity: 4 });
+  const info = await hub.start(0, '127.0.0.1');
+  return {
+    hub: hub,
+    port: info.port,
+    http: 'http://127.0.0.1:' + info.port,
+    ws: 'ws://127.0.0.1:' + info.port + '/ws'
+  };
+}
+
+function findRoomMsg(client, code) {
+  return function (m) {
+    return m.t === 'room' && m.room && m.room.code === code;
+  };
+}
+
+/* ---------------- HTTP ---------------- */
+
+test('HTTP: 첫 화면과 health, 공용 엔진 파일을 제공한다', async function () {
+  const env = await boot();
+  try {
+    const home = await fetch(env.http + '/');
+    assert.equal(home.status, 200);
+    const html = await home.text();
+    assert.match(html, /모둠 보드게임/);
+    assert.match(html, /engine\.js/);
+
+    const health = await fetch(env.http + '/health');
+    assert.equal(health.status, 200);
+    const info = await health.json();
+    assert.equal(info.ok, true);
+    assert.equal(info.rooms, 6);
+
+    const engine = await fetch(env.http + '/engine.js');
+    assert.equal(engine.status, 200);
+    const src = await engine.text();
+    assert.match(src, /class Game/);
+
+    const missing = await fetch(env.http + '/no-such-file.js');
+    assert.equal(missing.status, 404);
+  } finally {
+    await env.hub.close();
+  }
+});
+
+/* ---------------- 방 입장과 게임 진행 ---------------- */
+
+test('6개 모둠 방이 열려 있고, 입장 → 준비 → 시작 → 뒤집기 → 종 정답이 서버에서 판정된다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    clients.push(a);
+    const welcome = await a.next('welcome');
+    const groups = welcome.rooms.filter(function (r) { return r.isGroup; });
+    assert.equal(groups.length, 6);
+    assert.deepEqual(groups.map(function (r) { return r.code; }), ['1', '2', '3', '4', '5', '6']);
+    assert.equal(groups[0].capacity, 4);
+
+    // 1모둠 입장
+    a.send({ t: 'join', gameId: 'halligalli', code: '1', nickname: '학생1' });
+    const joinedA = await a.next('joined');
+    assert.equal(joinedA.code, '1');
+    assert.ok(joinedA.token);
+    const roomA = await a.next(findRoomMsg(a, '1'));
+    assert.equal(roomA.room.status, 'waiting');
+    assert.equal(roomA.room.seats.length, 1);
+    assert.equal(roomA.room.youAreHost, true);
+
+    // 같은 방 두 번째 학생
+    const b = await connect(env.ws);
+    clients.push(b);
+    await b.next('welcome');
+    b.send({ t: 'join', gameId: 'halligalli', code: '1', nickname: '학생2' });
+    await b.next('joined');
+    const roomB = await b.next(findRoomMsg(b, '1'));
+    assert.equal(roomB.room.seats.length, 2);
+    assert.equal(roomB.room.youAreHost, false);
+
+    // 준비 → 시작
+    b.send({ t: 'ready', ready: true });
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '1' && m.room.seats.some(function (s) { return s.name === '학생2' && s.ready; });
+    });
+    a.send({ t: 'start' });
+    const started = await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '1' && m.room.status === 'playing';
+    });
+    assert.equal(started.room.game.players.length, 2);
+    assert.equal(started.room.game.totalCards, 56);
+
+    // 현재 차례인 학생이 카드를 뒤집는다
+    const turnId = started.room.game.turn;
+    const turnClient = turnId === started.room.youId ? a : b;
+    const turnSeat = a === turnClient ? joinedA.playerId : null;
+    turnClient.send({ t: 'action', action: 'flip' });
+    const flipped = await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '1' && m.room.status === 'playing' &&
+        m.room.game.tableCount > 0;
+    });
+    assert.equal(flipped.room.game.tableCount, 1);
+    assert.equal(flipped.room.game.totalCards, 56);
+
+    // 서버 상태를 직접 만들어 '라임 5개' 상황을 만든 뒤 종을 친다
+    const room = env.hub.getRoom('halligalli', '1');
+    const game = room.game;
+    game.players[0].pile = [{ id: 'x1', fruit: 'lime', count: 3 }];
+    game.players[1].pile = [{ id: 'x2', fruit: 'lime', count: 2 }];
+    game.bellLockUntil = 0;
+    assert.deepEqual(game.bellFruits(), ['lime']);
+
+    const ringerId = joinedA.playerId;
+    a.send({ t: 'action', action: 'ring' });
+    const correct = await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '1' && m.room.game && m.room.game.tableCount === 0 &&
+        m.room.game.log.some(function (e) { return e.type === 'bell-correct'; });
+    });
+    assert.equal(correct.room.game.bellFruits.length, 0);
+    assert.equal(correct.room.game.bells.correct, 1);
+    assert.equal(game.playerById(ringerId).deck.length >= 1, true);
+
+    // 직후 연타는 잠금으로 거부된다
+    b.send({ t: 'action', action: 'ring' });
+    const locked = await b.next('action_result');
+    assert.equal(locked.ok, false);
+    assert.equal(locked.reason, 'bell_locked');
+
+    // 진행 중인 방에는 새로 입장할 수 없다
+    const c = await connect(env.ws);
+    clients.push(c);
+    await c.next('welcome');
+    c.send({ t: 'join', gameId: 'halligalli', code: '1', nickname: '학생3' });
+    const denied = await c.next('error');
+    assert.equal(denied.code, 'playing');
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('교사 관전: 6개 모둠 요약을 받고, 관전자는 게임에 참여할 수 없다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    clients.push(a);
+    await a.next('welcome');
+    a.send({ t: 'join', gameId: 'halligalli', code: '2', nickname: '모둠원' });
+    await a.next('joined');
+    a.send({ t: 'addBot' });
+    a.send({ t: 'addBot' });
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '2' && m.room.seats.filter(function (s) { return s.isBot; }).length === 2;
+    });
+    a.send({ t: 'start' });
+    await a.next(function (m) { return m.t === 'room' && m.room.code === '2' && m.room.status === 'playing'; });
+
+    const teacher = await connect(env.ws);
+    clients.push(teacher);
+    await teacher.next('welcome');
+    teacher.send({ t: 'overview', gameId: 'halligalli' });
+    const rooms = await teacher.next('rooms');
+    assert.equal(rooms.rooms.length, 6);
+    const room2 = rooms.rooms.find(function (r) { return r.code === '2'; });
+    assert.equal(room2.status, 'playing');
+    assert.equal(room2.playerCount, 3);
+    assert.ok(room2.turnName);
+    assert.ok(room2.lastEvent);
+    assert.equal(room2.players.length, 3);
+
+    // 관전 입장
+    teacher.send({ t: 'spectate', gameId: 'halligalli', code: '2' });
+    await teacher.next('spectating');
+    const view = await teacher.next(findRoomMsg(teacher, '2'));
+    assert.equal(view.room.role, 'spectator');
+    assert.equal(view.room.youId, null);
+    assert.ok(view.room.game);
+
+    // 관전자는 종/카드 조작 불가
+    teacher.send({ t: 'action', action: 'ring' });
+    const rejected = await teacher.next('error');
+    assert.equal(rejected.code, 'spectator');
+
+    // 관전 종료
+    teacher.send({ t: 'stopSpectate' });
+    await teacher.next('left');
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('모둠 방 정원(4명)을 넘으면 입장이 거부된다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    for (let i = 1; i <= 4; i++) {
+      const c = await connect(env.ws);
+      clients.push(c);
+      await c.next('welcome');
+      c.send({ t: 'join', gameId: 'halligalli', code: '3', nickname: '학생' + i });
+      await c.next('joined');
+    }
+    const extra = await connect(env.ws);
+    clients.push(extra);
+    await extra.next('welcome');
+    extra.send({ t: 'join', gameId: 'halligalli', code: '3', nickname: '학생5' });
+    const err = await extra.next('error');
+    assert.equal(err.code, 'full');
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('같은 닉네임으로는 같은 방에 들어갈 수 없다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    const b = await connect(env.ws);
+    clients.push(a, b);
+    await a.next('welcome');
+    await b.next('welcome');
+    a.send({ t: 'join', gameId: 'halligalli', code: '4', nickname: '지원' });
+    await a.next('joined');
+    b.send({ t: 'join', gameId: 'halligalli', code: '4', nickname: '지원' });
+    const err = await b.next('error');
+    assert.equal(err.code, 'dup_name');
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('새 방 만들기와 토큰으로 재접속(resume)이 동작한다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    clients.push(a);
+    await a.next('welcome');
+    a.send({ t: 'create', gameId: 'halligalli', nickname: '선생님' });
+    const joined = await a.next('joined');
+    assert.equal(joined.created, true);
+    assert.equal(joined.code.length, 4);
+    await a.next(findRoomMsg(a, joined.code));
+
+    const again = await connect(env.ws);
+    clients.push(again);
+    await again.next('welcome');
+    again.send({ t: 'resume', gameId: 'halligalli', code: joined.code, token: joined.token });
+    const resumed = await again.next('joined');
+    assert.equal(resumed.resumed, true);
+    assert.equal(resumed.playerId, joined.playerId);
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('연결이 끊긴 플레이어는 자동 플레이로 바뀌고 게임이 멈추지 않는다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    clients.push(a);
+    await a.next('welcome');
+    a.send({ t: 'join', gameId: 'halligalli', code: '5', nickname: '학생' });
+    const joined = await a.next('joined');
+    a.send({ t: 'addBot' });
+    a.send({ t: 'addBot' });
+    a.send({ t: 'addBot' });
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '5' && m.room.seats.filter(function (s) { return s.isBot; }).length === 3;
+    });
+    a.send({ t: 'start' });
+    await a.next(function (m) { return m.t === 'room' && m.room.code === '5' && m.room.status === 'playing'; });
+
+    const room = env.hub.getRoom('halligalli', '5');
+    assert.equal(room.game.players.length, 4);
+
+    a.close();
+    await new Promise(function (r) { setTimeout(r, 250); });
+    assert.equal(room.seats[0].autoPilot, true, '끊긴 플레이어는 자동 플레이');
+    assert.equal(room.game.playerById(joined.playerId).isBot, true);
+
+    // 봇들이 이어서 플레이한다 (진행 중이거나 종료)
+    await new Promise(function (r) { setTimeout(r, 900); });
+    assert.ok(['playing', 'finished'].indexOf(room.game.status) !== -1);
+    assert.equal(room.game.totalCards(), 56);
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
