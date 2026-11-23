@@ -154,10 +154,10 @@ npm test
 - 주소: **https://easyteacher98-hue.github.io/-/**
 - `public/` 폴더의 정적 파일만 올라간 `gh-pages` 브랜치를 Pages 소스로 사용합니다.
 - GitHub Pages는 **파일만 전달하는 정적 호스팅**이라 WebSocket 서버를 돌릴 수 없습니다. 그래서 이 링크에서는 **AI 봇 연습과 규칙 안내만** 동작하고, 모둠 실시간 대전은 아래 Render 서버 링크에서 합니다.
-- `public/` 을 고친 뒤 사이트에 반영하려면 `gh-pages` 브랜치를 다시 올려야 합니다:
+- `public/` 을 고친 뒤 사이트에 반영하려면 아래 명령 한 줄로 `gh-pages` 브랜치를 다시 만듭니다(1~2분 뒤 반영):
   ```bash
-  rsync -a --delete public/ ../gh-pages-tmp/   # public 내용 복사
-  cd ../gh-pages-tmp && git add -A && git commit -m "public 갱신" && git push origin gh-pages
+  bash scripts/deploy-pages.sh            # origin 의 gh-pages 로 배포
+  bash scripts/deploy-pages.sh --dry-run  # 푸시 없이 결과만 확인
   ```
 
 ### 8-2. 실시간 멀티플레이 — Render 무료 서버
