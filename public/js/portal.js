@@ -96,16 +96,76 @@
       mode: 'solo'
     },
     {
-      id: 'more',
-      title: '더 많은 게임',
-      emoji: '➕',
-      desc: '수업에 쓸 보드게임을 차례로 추가합니다. 다음으로 원하는 게임을 알려 주세요.',
-      players: '확장 예정',
-      status: 'soon',
-      href: null,
-      action: '준비 중',
-      grades: [],
+      id: 'rummi',
+      title: '숫자 타일 러미',
+      emoji: '🔢',
+      desc: '1~13 숫자 타일과 조커로 같은 숫자·연속 숫자 세트를 만들어 테이블에 내놓아요. 내 패를 먼저 다 내면 우승!',
+      players: '2~4명 · 모둠당 4명',
+      status: 'ready',
+      href: '#/rummi',
+      action: '지금 플레이',
+      grades: ['mid', 'high'],
       mode: 'multi'
+    },
+    {
+      id: 'oldmaid',
+      title: '도둑잡기',
+      emoji: '🃏',
+      desc: '동물 짝 카드를 맞춰 버리고, 마지막까지 도둑 카드를 들고 있지 않으면 됩니다. 앞사람 패에서 한 장씩!',
+      players: '2~5명 · 모둠당 4명',
+      status: 'ready',
+      href: '#/oldmaid',
+      action: '지금 플레이',
+      grades: ['low', 'mid', 'high'],
+      mode: 'multi'
+    },
+    {
+      id: 'janggi',
+      title: '전통 장기',
+      emoji: '♟️',
+      desc: '9×10 장기판에서 초와 한의 1:1 대결. 차·포·마·상·사·졸·궁을 움직여 상대 궁을 잡으면 승리!',
+      players: '2명 · 모둠당 2명',
+      status: 'ready',
+      href: '#/janggi',
+      action: '지금 플레이',
+      grades: ['mid', 'high'],
+      mode: 'multi'
+    },
+    {
+      id: 'onecard',
+      title: '컬러 숫자 카드',
+      emoji: '🎨',
+      desc: '같은 색·같은 숫자를 내고, 점프·방향전환·+2 공격·색 바꾸기로 판을 흔들어요. 손패를 먼저 0장으로!',
+      players: '2~5명 · 모둠당 4명',
+      status: 'ready',
+      href: '#/onecard',
+      action: '지금 플레이',
+      grades: ['low', 'mid', 'high'],
+      mode: 'multi'
+    },
+    {
+      id: 'dots',
+      title: '선 긋기 땅따먹기',
+      emoji: '✏️',
+      desc: '5×5 점 사이에 선을 그어 사각형을 완성하면 그 칸이 내 땅! 가장 많은 땅을 차지하면 승리합니다.',
+      players: '2~4명 · 모둠당 4명',
+      status: 'ready',
+      href: '#/dots',
+      action: '지금 플레이',
+      grades: ['low', 'mid'],
+      mode: 'multi'
+    },
+    {
+      id: 'sudoku',
+      title: '1인용 스도쿠',
+      emoji: '🔢',
+      desc: '4×4(저학년) · 6×6(중학년) · 9×9(고학년) 스도쿠. 메모·힌트·오답 표시로 혼자서 차근차근 풀어 보세요.',
+      players: '1명 · 혼자서',
+      status: 'ready',
+      href: '#/sudoku',
+      action: '혼자 하기',
+      grades: ['low', 'mid', 'high'],
+      mode: 'solo'
     }
   ];
 
@@ -421,7 +481,7 @@
       '<section class="panel" style="margin-top:22px">' +
         '<div class="panel-title">🎮 입장 방법</div>' +
         '<ol class="rules-list">' +
-          '<li>원하는 게임(과일 딩동 · 전국여행 마블 · 숫자 줄세우기 · 오목 · 라이어 · 윷놀이)을 고르고 <b>출석번호(1~99)</b>와 <b>이름</b>을 입력합니다.</li>' +
+          '<li>원하는 게임(과일 딩동 · 전국여행 마블 · 숫자 줄세우기 · 오목 · 라이어 · 윷놀이 · 숫자 타일 러미 · 도둑잡기 · 장기 · 컬러 숫자 카드 · 선 긋기 땅따먹기)을 고르고 <b>출석번호(1~99)</b>와 <b>이름</b>을 입력합니다.</li>' +
           '<li>자기 <b>모둠(1~6모둠)</b>을 누르면 바로 그 모둠 방으로 들어가요.</li>' +
           '<li>모둠원이 모이면 방장이 <b>게임 시작</b>을 누릅니다.</li>' +
         '</ol>' +

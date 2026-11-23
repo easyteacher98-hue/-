@@ -2713,3 +2713,200 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
   .mg-gomoku-foot { gap: 8px; }
   .mg-hint-line { margin-left: 0; }
 }
+
+/* =========================================================
+   2차 확장 게임 (숫자 타일 러미 · 도둑잡기 · 장기 · 컬러 숫자 카드 · 선 긋기 · 스도쿠)
+   ========================================================= */
+
+/* ---------- 공통 카드 색 ---------- */
+.c-red { background: linear-gradient(160deg, #ff8f7a, #e8553c); color: #fff; }
+.c-blue { background: linear-gradient(160deg, #7db6ee, #3b7fc4); color: #fff; }
+.c-yellow { background: linear-gradient(160deg, #ffd66b, #e2a821); color: #6b4a05; }
+.c-green { background: linear-gradient(160deg, #8fd8a9, #3f9e68); color: #fff; }
+.mg-empty-hand { font-size: 13px; font-weight: 800; color: var(--muted); }
+
+/* ---------- 숫자 타일 러미 ---------- */
+.mg-rummi-register-line { display: flex; justify-content: flex-end; margin: 2px 0 8px; }
+.mg-rummi-register { font-size: 12px; font-weight: 800; color: #b0562f; background: #fff1e6; border-radius: 999px; padding: 4px 12px; }
+.mg-rummi-register b { color: var(--coral-dark); }
+.mg-rummi-registered { font-size: 12px; font-weight: 800; color: #2f7a55; background: #e6f6ec; border-radius: 999px; padding: 4px 12px; }
+.mg-rummi-table { display: flex; flex-direction: column; gap: 8px; background: #fbf3e6; border: 1px dashed var(--line-strong); border-radius: var(--radius-md); padding: 10px; min-height: 64px; max-height: 260px; overflow: auto; }
+.mg-rummi-set { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px; }
+.mg-rummi-set-tiles { display: flex; flex-wrap: wrap; gap: 4px; }
+.mg-rummi-set-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.mg-rummi-set-points { font-size: 11px; font-weight: 800; color: var(--muted); }
+.mg-rummi-staging { margin-top: 10px; background: #fffaf0; border: 1px solid #ffe0bd; border-radius: var(--radius-sm); padding: 10px; }
+.mg-rummi-staging-head { font-size: 12.5px; font-weight: 800; color: var(--ink-soft); }
+.mg-rummi-pending { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; min-height: 24px; align-items: center; }
+.mg-rummi-pending-set { display: inline-flex; gap: 3px; padding: 3px; border-radius: 10px; background: #fff; border: 1px dashed #ffcfa2; }
+.mg-rummi-pending-set.is-add { font-size: 11px; font-weight: 800; color: #2f7fbf; padding: 5px 9px; }
+.mg-rummi-hand-wrap, .mg-oc-hand-wrap { margin-top: 12px; }
+.mg-rummi-hand-head { font-size: 12.5px; font-weight: 900; color: var(--ink-soft); margin-bottom: 6px; }
+.mg-rummi-hand, .mg-oc-hand { display: flex; flex-wrap: wrap; gap: 6px; }
+.mg-rummi-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.mg-tile {
+  width: 40px; height: 52px; border-radius: 10px; border: 2px solid rgba(0,0,0,0.08);
+  font-family: var(--font-display); font-size: 21px; font-weight: 900;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.12); cursor: pointer;
+  transition: transform .12s;
+}
+.mg-tile.is-small { width: 30px; height: 38px; font-size: 16px; border-radius: 8px; cursor: default; }
+.mg-tile:hover { transform: translateY(-2px); }
+.mg-tile.is-selected { outline: 3px solid #2f7fbf; outline-offset: 1px; transform: translateY(-6px); }
+.mg-tile.joker { background: linear-gradient(160deg, #ffe7a8, #f4b93f); color: #7a4f00; }
+
+/* ---------- 도둑잡기 ---------- */
+.mg-om-target { margin: 6px 0 10px; background: #fbf3e6; border: 1px dashed var(--line-strong); border-radius: var(--radius-md); padding: 12px; }
+.mg-om-target.is-me { background: #eef7ff; border-color: #b9dcfb; }
+.mg-om-target.is-done { background: #fff1f1; border-color: #f7c2c2; }
+.mg-om-target-head { font-size: 13px; font-weight: 800; color: var(--ink-soft); margin-bottom: 8px; }
+.mg-om-back-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.mg-om-back {
+  width: 42px; height: 58px; border-radius: 9px; border: 2px solid #c9b8a2;
+  background: repeating-linear-gradient(45deg, #7f9fd0, #7f9fd0 6px, #6d8cbb 6px, #6d8cbb 12px);
+  color: #fff; font-size: 20px; font-weight: 900; cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.14);
+}
+.mg-om-back:hover { transform: translateY(-3px); }
+.mg-om-hand { display: flex; flex-wrap: wrap; gap: 6px; }
+.mg-om-card {
+  width: 46px; height: 62px; border-radius: 10px; background: #fff; border: 2px solid var(--line-strong);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 26px;
+  box-shadow: var(--shadow-xs);
+}
+.mg-om-card.is-thief { background: linear-gradient(160deg, #ffe1e1, #ffb3b3); border-color: #ef9a9a; }
+.mg-om-last { font-size: 12.5px; font-weight: 800; color: #2f7fbf; background: #eef7ff; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
+
+/* ---------- 장기 ---------- */
+.mg-jg-wrap { display: flex; justify-content: center; }
+.mg-jg-grid {
+  display: grid; grid-template-columns: repeat(9, 1fr);
+  width: min(100%, 470px); background: #f6e3c4; border: 3px solid #b08048; border-radius: 10px;
+  padding: 3px; gap: 1px;
+}
+.mg-jg-cell {
+  position: relative; aspect-ratio: 1 / 1.1; border: 1px solid rgba(176,128,72,0.35);
+  background: transparent; padding: 0; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; border-radius: 3px;
+}
+.mg-jg-cell.palace { background: rgba(255, 246, 214, 0.55); }
+.mg-jg-cell.can-go { background: rgba(107, 159, 224, 0.22); }
+.mg-jg-cell.is-selected { background: rgba(244, 119, 92, 0.28); box-shadow: inset 0 0 0 2px var(--coral); }
+.mg-jg-cell.last-from { box-shadow: inset 0 0 0 2px #9bbf6b; }
+.mg-jg-cell.last-to { box-shadow: inset 0 0 0 2px #dfa62f; }
+.mg-jg-piece {
+  width: 84%; height: 84%; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: clamp(13px, 3.4vw, 20px); font-weight: 900;
+  background: #fffdf5; border: 2px solid #b08048; color: #1f4f7a;
+  box-shadow: 0 2px 0 rgba(120, 86, 50, 0.2);
+}
+.mg-jg-piece.cho { color: #c0392b; border-color: #d4756a; }
+.mg-jg-piece.han { color: #1f5a3c; border-color: #71a98d; }
+.mg-jg-piece.mine { box-shadow: 0 0 0 2px rgba(244, 119, 92, 0.5), 0 2px 0 rgba(120,86,50,0.2); }
+.mg-jg-dot { width: 34%; height: 34%; border-radius: 50%; background: rgba(47, 127, 191, 0.55); }
+.mg-jg-foot { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 10px; font-size: 12px; font-weight: 800; color: var(--ink-soft); }
+.mg-jg-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+.mg-jg-swatch.cho { background: #c0392b; }
+.mg-jg-swatch.han { background: #1f5a3c; }
+.mg-jg-captured { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 6px; font-size: 11.5px; color: var(--muted); font-weight: 700; }
+
+/* ---------- 컬러 숫자 카드 ---------- */
+.mg-oc-table { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: #f3f9f1; border: 1px dashed #bfe0c6; border-radius: var(--radius-md); padding: 16px; }
+.mg-oc-discard { display: flex; align-items: center; gap: 10px; }
+.mg-oc-color-chip { font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 999px; border: 2px solid rgba(0,0,0,0.12); }
+.mg-oc-draw { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.mg-oc-deck { position: relative; width: 46px; height: 62px; border-radius: 10px; background: repeating-linear-gradient(135deg, #b9c9e8, #b9c9e8 5px, #a3b6da 5px, #a3b6da 10px); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 3px 0 rgba(0,0,0,0.15); }
+.mg-oc-deck span { position: absolute; bottom: -9px; right: -9px; background: #fff; color: var(--ink); border-radius: 999px; font-size: 11px; font-weight: 900; padding: 2px 7px; border: 1px solid var(--line-strong); }
+.mg-oc-card {
+  width: 46px; height: 64px; border-radius: 10px; border: none; font-family: var(--font-display);
+  font-size: 22px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.16); cursor: pointer; transition: transform .12s;
+}
+.mg-oc-card.is-small { width: 36px; height: 50px; font-size: 18px; }
+.mg-oc-card.is-playable { outline: 3px solid #f2b543; outline-offset: 2px; }
+.mg-oc-card.is-playable:hover { transform: translateY(-5px); }
+.mg-oc-card:disabled { opacity: .55; cursor: default; }
+.mg-oc-card.is-wild { background: conic-gradient(#f4775c, #f2b543, #4fb083, #6b9fe0, #9b7fe0, #f4775c); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.mg-color-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+.mg-color-btn { height: 54px; border-radius: 14px; font-size: 16px; font-weight: 900; border: none; }
+.mg-color-btn.c-red { background: #e8553c; color: #fff; }
+.mg-color-btn.c-blue { background: #3b7fc4; color: #fff; }
+.mg-color-btn.c-yellow { background: #e2a821; color: #fff; }
+.mg-color-btn.c-green { background: #3f9e68; color: #fff; }
+
+/* ---------- 선 긋기 땅따먹기 ---------- */
+.mg-dots-stage { display: flex; justify-content: center; padding: 10px 0; }
+.mg-dots-board { position: relative; width: min(100%, 440px); aspect-ratio: 1; background: #fffdf7; border: 1px solid var(--line); border-radius: var(--radius-md); }
+.mg-dots-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #b08048; transform: translate(-50%, -50%); z-index: 3; }
+.mg-dots-box { position: absolute; border-radius: 6px; background: rgba(242, 181, 67, 0.08); display: flex; align-items: center; justify-content: center; z-index: 1; }
+.mg-dots-box.is-owned { opacity: .85; }
+.mg-dots-owner { font-size: 9px; font-weight: 900; color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,.35); padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%; }
+.mg-dots-line { position: absolute; border: none; padding: 0; background: #e8d6bd; border-radius: 999px; z-index: 2; transform: translate(-50%, -50%); }
+.mg-dots-line.h { width: 19.1%; height: 7px; }
+.mg-dots-line.v { width: 7px; height: 19.1%; }
+.mg-dots-line:disabled { opacity: 1; cursor: default; }
+.mg-dots-line:not(:disabled):hover { background: #f2b543; }
+.mg-dots-line.is-owned { background: #b08048; }
+.mg-dots-scores { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.mg-dots-score { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; background: #fff8ec; border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; }
+.mg-dots-score i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.mg-dots-score.is-turn { border-color: #ffc79e; background: #fff2e4; }
+
+/* ---------- 1인용 스도쿠 ---------- */
+.sd-hero { padding-bottom: 8px; }
+.sd-size-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.sd-size-card {
+  display: flex; flex-direction: column; gap: 8px; text-decoration: none; color: inherit;
+  background: var(--surface); border: 2px solid var(--line); border-radius: var(--radius-md); padding: 18px;
+  box-shadow: var(--shadow-sm); transition: transform .15s, border-color .15s;
+}
+.sd-size-card:hover { transform: translateY(-4px); border-color: #ffc79e; }
+.sd-size-emoji { font-size: 30px; }
+.sd-size-title { font-family: var(--font-display); font-size: 20px; display: flex; align-items: center; gap: 8px; }
+.sd-size-desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.sd-size-best { font-size: 12px; color: var(--ink-soft); }
+.sd-size-best b { color: var(--coral-dark); }
+.sd-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 10px 0 14px; }
+.sd-head-info, .sd-head-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sd-chip { font-size: 12px; font-weight: 800; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; }
+.sd-chip b { color: var(--coral-dark); }
+.sd-stage { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 18px; align-items: start; }
+.sd-board { display: flex; justify-content: center; }
+.sd-grid {
+  display: grid; grid-template-columns: repeat(var(--sd-cols), 1fr);
+  width: min(100%, 470px); background: #fff; border: 3px solid #8d7867; border-radius: 10px; overflow: hidden;
+}
+.sd-cell {
+  aspect-ratio: 1; border: 1px solid #e2d3c0; background: #fffdf9; padding: 0;
+  display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer;
+  font-family: var(--font-display); font-size: clamp(14px, 4vw, 26px); color: #2f7fbf; font-weight: 700;
+}
+.sd-cell.is-fixed { background: #f7efe1; color: var(--ink); font-weight: 900; }
+.sd-cell.is-line { background: #f2f9ff; }
+.sd-cell.is-selected { background: #d9ecff; box-shadow: inset 0 0 0 2px #2f7fbf; }
+.sd-cell.is-bad { color: #d9372a; background: #ffe9e6; }
+.sd-cell.br { border-right: 2.5px solid #8d7867; }
+.sd-cell.bb { border-bottom: 2.5px solid #8d7867; }
+.sd-value { pointer-events: none; }
+.sd-notes { position: absolute; inset: 3px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; font-size: clamp(6px, 1.7vw, 10px); color: var(--muted); font-family: var(--font-body); font-weight: 700; }
+.sd-notes i { font-style: normal; display: flex; align-items: center; justify-content: center; }
+.sd-side { display: flex; flex-direction: column; gap: 12px; }
+.sd-pad { display: grid; grid-template-columns: repeat(var(--sd-pad-cols), 1fr); gap: 8px; }
+.sd-num {
+  aspect-ratio: 1; border-radius: 12px; border: 1px solid var(--line-strong); background: #fffaf0;
+  font-family: var(--font-display); font-size: 22px; color: var(--ink); cursor: pointer; box-shadow: 0 2px 0 rgba(140,100,60,0.15);
+}
+.sd-num:hover { background: #ffeccc; transform: translateY(-1px); }
+.sd-erase { font-size: 18px; background: #f7f0e4; }
+.sd-status { font-size: 13px; font-weight: 800; color: var(--ink-soft); }
+.sd-done { color: #2f7a55; }
+.sd-me { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+
+@media (max-width: 860px) {
+  .sd-stage { grid-template-columns: 1fr; }
+  .sd-side { order: 2; }
+  .sd-pad { grid-template-columns: repeat(var(--sd-pad-cols), 1fr); max-width: 420px; margin: 0 auto; width: 100%; }
+  .sd-size-grid { grid-template-columns: 1fr; }
+  .mg-jg-grid { width: 100%; }
+}

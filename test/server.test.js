@@ -72,7 +72,7 @@ test('HTTP: 첫 화면과 health, 공용 엔진 파일을 제공한다', async f
     assert.equal(health.status, 200);
     const info = await health.json();
     assert.equal(info.ok, true);
-    assert.equal(info.rooms, 36, '6개 게임(과일 딩동·마블·숫자 줄세우기·오목·라이어·윷놀이) × 6모둠');
+    assert.equal(info.rooms, 66, '11개 모둠 게임(과일 딩동·마블·줄세우기·오목·라이어·윷놀이·타일 러미·도둑잡기·장기·컬러 카드·선 긋기) × 6모둠');
 
     const engine = await fetch(env.http + '/engine.js');
     assert.equal(engine.status, 200);

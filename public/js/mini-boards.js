@@ -372,12 +372,521 @@
     '</div>';
   }
 
+  /* ---------------- 숫자 타일 러미 ---------------- */
+
+  const RUMMI_COLOR = { red: '빨강', blue: '파랑', yellow: '노랑', green: '초록' };
+  const rummiUI = { selected: [], pendingMelds: [], pendingAdds: [], moves: -1, turn: null };
+
+  function resetRummiUI(state) {
+    rummiUI.selected = [];
+    rummiUI.pendingMelds = [];
+    rummiUI.pendingAdds = [];
+    rummiUI.moves = state ? state.moves : -1;
+    rummiUI.turn = state ? state.turnPlayerId : null;
+  }
+
+  function rummiTileHtml(tile, opts) {
+    const o = opts || {};
+    const cls = 'mg-tile ' + (tile.joker ? 'joker' : 'c-' + tile.color) +
+      (o.selected ? ' is-selected' : '') + (o.small ? ' is-small' : '');
+    const body = tile.joker ? '⭐' : tile.value;
+    const label = tile.joker ? '조커' : RUMMI_COLOR[tile.color] + ' ' + tile.value;
+    if (o.static) return '<span class="' + cls + '" aria-label="' + label + '">' + body + '</span>';
+    return '<button class="' + cls + '" data-action="mini.rummiTile" data-id="' + tile.id + '"' +
+      ' aria-pressed="' + (o.selected ? 'true' : 'false') + '" aria-label="' + label + '">' + body + '</button>';
+  }
+
+  function handTileOf(state, id) {
+    return (state.hand || []).find(function (t) { return t.id === id; }) || null;
+  }
+
+  function pendingIds() {
+    const ids = [];
+    rummiUI.pendingMelds.forEach(function (group) { group.forEach(function (id) { ids.push(id); }); });
+    rummiUI.pendingAdds.forEach(function (add) { add.tileIds.forEach(function (id) { ids.push(id); }); });
+    return ids;
+  }
+
+  function rummiBoard(state, ctx) {
+    if (rummiUI.moves !== state.moves || rummiUI.turn !== state.turnPlayerId) resetRummiUI(state);
+    const myTurn = state.status === 'playing' && state.turnPlayerId === state.youId;
+    const staged = pendingIds();
+    const stagedTiles = staged.map(function (id) { return handTileOf(state, id); }).filter(Boolean);
+    const stagedPoints = stagedTiles.reduce(function (sum, t) { return sum + (t.joker ? 10 : t.value); }, 0);
+    const need = state.initialPoints;
+    const needLeft = Math.max(0, need - stagedPoints);
+
+    const handTiles = (state.hand || []).filter(function (t) { return staged.indexOf(t.id) === -1; });
+    const hand = handTiles.map(function (tile) {
+      return rummiTileHtml(tile, { selected: rummiUI.selected.indexOf(tile.id) !== -1 });
+    }).join('') || '<span class="mg-empty-hand">' + (state.youId ? '손패가 비었습니다!' : '관전 중입니다.') + '</span>';
+
+    const table = (state.table || []).map(function (set) {
+      const tiles = set.tiles.map(function (t) { return rummiTileHtml(t, { static: true, small: true }); }).join('');
+      const pick = rummiUI.selected.length;
+      return '<div class="mg-rummi-set">' +
+        '<div class="mg-rummi-set-tiles">' + tiles + '</div>' +
+        '<div class="mg-rummi-set-foot">' +
+          '<span class="mg-rummi-set-points">' + set.points + '점</span>' +
+          (myTurn && pick
+            ? '<button class="btn btn-ghost btn-xs" data-action="mini.rummiAdd" data-set="' + set.id + '">여기에 붙이기</button>'
+            : '') +
+        '</div>' +
+      '</div>';
+    }).join('') || '<div class="empty">아직 테이블에 낸 타일이 없습니다.</div>';
+
+    const stagedHtml = rummiUI.pendingMelds.map(function (group) {
+      return '<span class="mg-rummi-pending-set">' + group.map(function (id) {
+        const t = handTileOf(state, id);
+        return t ? rummiTileHtml(t, { static: true, small: true }) : '';
+      }).join('') + '</span>';
+    }).join('');
+    const stagedAdds = rummiUI.pendingAdds.map(function (add) {
+      return '<span class="mg-rummi-pending-set is-add">붙이기 ' + add.tileIds.length + '장</span>';
+    }).join('');
+
+    const canMeld = rummiUI.selected.length >= 3 &&
+      window.Rummi && window.Rummi.validateSet(rummiUI.selected.map(function (id) { return handTileOf(state, id); }).filter(Boolean)).ok;
+    const submitReady = (rummiUI.pendingMelds.length + rummiUI.pendingAdds.length) > 0 &&
+      (state.youMelded || stagedPoints >= need);
+
+    const registerLine = state.youMelded
+      ? '<span class="mg-rummi-registered">✅ 처음 등록 완료</span>'
+      : '<span class="mg-rummi-register">처음 등록까지 <b>' + needLeft + '점</b> 남음 (기준 ' + need + '점)</span>';
+
+    return '<div class="mg-board mg-rummi">' +
+      '<div class="mg-turn-bar ' + (myTurn ? 'is-me' : '') + '">' +
+        (state.status === 'finished'
+          ? '<span class="mg-turn-text">🏁 게임 끝! ' + esc((state.players.find(function (p) { return p.id === state.winnerId; }) || (state.ranking && state.ranking[0]) || {}).name || '') + '님이 가장 좋은 성적!</span>'
+          : '<span class="mg-turn-text">' + (myTurn
+            ? '내 차례! 타일을 골라 세트를 만드세요.'
+            : esc((state.players.find(function (p) { return p.id === state.turnPlayerId; }) || {}).name || '') + '님 차례…') + '</span>') +
+        '<span class="mg-round-chip">더미 ' + state.deckCount + '장</span>' +
+      '</div>' +
+      '<div class="mg-rummi-register-line">' + registerLine + '</div>' +
+      '<div class="mg-rummi-table">' + table + '</div>' +
+      '<div class="mg-rummi-staging">' +
+        '<div class="mg-rummi-staging-head">내가 낼 타일' +
+          (stagedTiles.length ? ' <b>' + stagedTiles.length + '장 · ' + stagedPoints + '점</b>' : ' <span class="hint">타일을 골라 [세트로 담기]</span>') + '</div>' +
+        '<div class="mg-rummi-pending">' + (stagedHtml + stagedAdds || '<span class="hint">없음</span>') + '</div>' +
+        (staged.length
+          ? '<div class="row" style="gap:8px;margin-top:8px">' +
+              '<button class="btn btn-sm btn-ghost" data-action="mini.rummiReset">되돌리기</button>' +
+            '</div>'
+          : '') +
+      '</div>' +
+      '<div class="mg-rummi-hand-wrap">' +
+        '<div class="mg-rummi-hand-head">내 패 <span class="hint">' + handTiles.length + '장</span></div>' +
+        '<div class="mg-rummi-hand">' + hand + '</div>' +
+      '</div>' +
+      '<div class="mg-rummi-actions">' +
+        (myTurn && state.status === 'playing'
+          ? '<button class="btn btn-sm" data-action="mini.rummiMeld"' + (canMeld ? '' : ' disabled') + '>세트로 담기</button>' +
+            '<button class="btn btn-sm btn-ghost" data-action="mini.rummiDraw"' + (staged.length ? ' disabled' : '') + '>한 장 뽑기</button>' +
+            '<button class="btn btn-sm btn-primary" data-action="mini.rummiSubmit"' + (submitReady ? '' : ' disabled') + '>타일 내기 ▶</button>'
+          : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ---------------- 도둑잡기 ---------------- */
+
+  function oldmaidBoard(state) {
+    const myTurn = state.status === 'playing' && state.turnPlayerId === state.youId;
+    const turnName = (state.players.find(function (p) { return p.id === state.turnPlayerId; }) || {}).name;
+    const target = state.players.find(function (p) { return p.id === state.targetId; });
+
+    const hand = (state.hand || []).map(function (card) {
+      return '<span class="mg-om-card' + (card.thief ? ' is-thief' : '') + '" aria-label="' + (card.thief ? '도둑 카드' : '동물 카드') + '">' + card.emoji + '</span>';
+    }).join('') || '<span class="mg-empty-hand">' + (state.youId ? '손패가 비었습니다! 🎉' : '관전 중입니다.') + '</span>';
+
+    let targetBox = '';
+    if (state.status === 'playing') {
+      if (myTurn && target && state.targetCount > 0) {
+        const cards = [];
+        for (let i = 0; i < state.targetCount; i++) {
+          cards.push('<button class="mg-om-back" data-action="mini.omDraw" data-index="' + i + '" aria-label="' + esc(target.name) + '의 ' + (i + 1) + '번째 카드 뽑기">?</button>');
+        }
+        targetBox = '<div class="mg-om-target is-me">' +
+          '<div class="mg-om-target-head">👉 <b>' + esc(target.name) + '</b>님의 패에서 한 장 뽑으세요</div>' +
+          '<div class="mg-om-back-row">' + cards.join('') + '</div></div>';
+      } else if (myTurn) {
+        targetBox = '<div class="mg-om-target"><div class="mg-om-target-head">뽑을 카드가 없습니다. 차례를 기다려 주세요…</div></div>';
+      } else {
+        targetBox = '<div class="mg-om-target"><div class="mg-om-target-head">' + esc(turnName || '') + '님이 카드를 뽑는 중…</div></div>';
+      }
+    } else {
+      const holder = state.players.find(function (p) { return p.id === state.thiefHolderId; });
+      targetBox = '<div class="mg-om-target is-done"><div class="mg-om-target-head">🃏 도둑 카드를 들고 있는 사람: <b>' +
+        esc(holder ? holder.name : '없음') + '</b></div></div>';
+    }
+
+    const last = state.lastDraw;
+    const lastLine = last
+      ? '<div class="mg-om-last">' + esc((state.players.find(function (p) { return p.id === last.toId; }) || {}).name || '') +
+        '님이 ' + esc((state.players.find(function (p) { return p.id === last.fromId; }) || {}).name || '') + '님에게서 ' +
+        (last.thief ? '도둑 카드 🃏' : last.emoji) + (last.paired ? ' → 짝을 맞춰 버렸어요!' : '') + '</div>'
+      : '';
+
+    return '<div class="mg-board mg-oldmaid">' +
+      '<div class="mg-turn-bar ' + (myTurn ? 'is-me' : '') + '">' +
+        '<span class="mg-turn-text">' + (state.status === 'finished' ? '🏁 게임 끝' :
+          myTurn ? '내 차례! 앞사람 패에서 카드를 뽑으세요.' : esc(turnName || '') + '님 차례…') + '</span>' +
+        '<span class="mg-round-chip">남은 사람 ' + state.players.filter(function (p) { return !p.finished; }).length + '명</span>' +
+      '</div>' +
+      targetBox + lastLine +
+      '<div class="mg-om-hand-wrap"><div class="mg-rummi-hand-head">내 패 <span class="hint">' + (state.hand || []).length + '장</span></div>' +
+        '<div class="mg-om-hand">' + hand + '</div></div>' +
+    '</div>';
+  }
+
+  /* ---------------- 전통 장기 ---------------- */
+
+  const janggiUI = { selected: null, moves: -1, turn: null };
+
+  function janggiBoard(state) {
+    if (janggiUI.moves !== state.moveCount || janggiUI.turn !== state.turnPlayerId) {
+      janggiUI.selected = null;
+      janggiUI.moves = state.moveCount;
+      janggiUI.turn = state.turnPlayerId;
+    }
+    const myTurn = state.status === 'playing' && state.turnPlayerId === state.youId;
+    const myMoves = state.legalMoves || [];
+    const fromMoves = janggiUI.selected
+      ? myMoves.filter(function (m) { return m.from.x === janggiUI.selected.x && m.from.y === janggiUI.selected.y; })
+      : [];
+    const targets = {};
+    fromMoves.forEach(function (m) { targets[m.to.x + ',' + m.to.y] = true; });
+    const last = state.lastMove;
+
+    const cells = [];
+    for (let y = 0; y < state.height; y++) {
+      for (let x = 0; x < state.width; x++) {
+        const piece = state.board[y][x];
+        const isSel = janggiUI.selected && janggiUI.selected.x === x && janggiUI.selected.y === y;
+        const canGo = !!targets[x + ',' + y];
+        const isLastFrom = last && last.from.x === x && last.from.y === y;
+        const isLastTo = last && last.to.x === x && last.to.y === y;
+        const palace = x >= 3 && x <= 5 && ((y >= 0 && y <= 2) || (y >= 7 && y <= 9));
+        let cls = 'mg-jg-cell' + (palace ? ' palace' : '');
+        if (isSel) cls += ' is-selected';
+        if (canGo) cls += ' can-go';
+        if (isLastFrom) cls += ' last-from';
+        if (isLastTo) cls += ' last-to';
+        const mine = piece && state.youSide && piece.side === state.youSide;
+        cells.push(
+          '<button class="' + cls + '" data-action="mini.janggiCell" data-x="' + x + '" data-y="' + y + '"' +
+            ' aria-label="' + String.fromCharCode(65 + x) + (state.height - y) + (piece ? ' ' + piece.char : ' 빈칸') + '">' +
+            (piece
+              ? '<span class="mg-jg-piece ' + piece.side + (mine ? ' mine' : '') + '">' + piece.char + '</span>'
+              : (canGo ? '<span class="mg-jg-dot"></span>' : '')) +
+          '</button>'
+        );
+      }
+    }
+
+    const turnName = (state.players.find(function (p) { return p.id === state.turnPlayerId; }) || {}).name;
+    const me = state.players.find(function (p) { return p.id === state.youId; });
+    const opp = state.players.find(function (p) { return p.id !== state.youId; });
+    const CHAR = { general: '궁', chariot: '차', cannon: '포', horse: '마', elephant: '상', guard: '사', soldier: '졸' };
+
+    return '<div class="mg-board mg-janggi">' +
+      '<div class="mg-turn-bar ' + (myTurn ? 'is-me' : '') + '">' +
+        (state.status === 'finished'
+          ? '<span class="mg-turn-text">🏁 ' + (state.winnerId
+              ? esc((state.players.find(function (p) { return p.id === state.winnerId; }) || {}).name || '') + '님 승리!'
+              : '무승부입니다.') + '</span>'
+          : '<span class="mg-turn-text">' + (myTurn ? '내 차례! 기물을 누르고 갈 곳을 고르세요.' : esc(turnName || '') + '님 차례…') + '</span>') +
+        '<span class="mg-round-chip">' + state.moveCount + '수</span>' +
+      '</div>' +
+      '<div class="mg-jg-wrap"><div class="mg-jg-grid">' + cells.join('') + '</div></div>' +
+      '<div class="mg-jg-foot">' +
+        '<span class="mg-legend"><i class="mg-jg-swatch cho"></i>초 ' + esc(me && me.side === 'cho' ? '나' : (opp ? opp.name : '')) + '</span>' +
+        '<span class="mg-legend"><i class="mg-jg-swatch han"></i>한 ' + esc(me && me.side === 'han' ? '나' : (opp ? opp.name : '')) + '</span>' +
+        (myTurn && janggiUI.selected ? '<span class="mg-hint-line">반짝이는 곳으로 움직이면 됩니다. (다시 누르면 취소)</span>' : '') +
+      '</div>' +
+      '<div class="mg-jg-captured">' +
+        (me ? '<span>내가 잡은 기물: ' + (me.captured.length ? me.captured.map(function (t) { return CHAR[t] || t; }).join(' ') : '없음') + '</span>' : '') +
+        (opp ? '<span>상대가 잡은 기물: ' + (opp.captured.length ? opp.captured.map(function (t) { return CHAR[t] || t; }).join(' ') : '없음') + '</span>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ---------------- 컬러 숫자 카드 ---------------- */
+
+  const OC_LABEL = { skip: '⏭', reverse: '🔄', draw2: '+2', wild: '🌈' };
+
+  function ocCardHtml(card, opts) {
+    const o = opts || {};
+    let cls = 'mg-oc-card ' + (card.color ? 'c-' + card.color : 'is-wild');
+    if (o.playable) cls += ' is-playable';
+    if (o.small) cls += ' is-small';
+    const label = card.type === 'number' ? card.value : (OC_LABEL[card.type] || '?');
+    const name = card.type === 'number' ? (card.color + ' ' + card.value) : card.type;
+    if (o.static) { return '<span class="' + cls + '" aria-label="' + name + '">' + label + '</span>'; }
+    return '<button class="' + cls + '" data-action="mini.ocPlay" data-card="' + card.id + '" aria-label="' + name + '"' +
+      (o.playable ? '' : ' disabled') + '>' + label + '</button>';
+  }
+
+  function onecardBoard(state) {
+    const myTurn = state.status === 'playing' && state.turnPlayerId === state.youId;
+    const playable = state.youPlayable || [];
+    const turnName = (state.players.find(function (p) { return p.id === state.turnPlayerId; }) || {}).name;
+    const COLOR_NAME = { red: '빨강', blue: '파랑', yellow: '노랑', green: '초록' };
+
+    const hand = (state.hand || []).map(function (card) {
+      return ocCardHtml(card, { playable: myTurn && playable.indexOf(card.id) !== -1 });
+    }).join('') || '<span class="mg-empty-hand">' + (state.youId ? '손패가 비었습니다! 🎉' : '관전 중입니다.') + '</span>';
+
+    return '<div class="mg-board mg-onecard">' +
+      '<div class="mg-turn-bar ' + (myTurn ? 'is-me' : '') + '">' +
+        (state.status === 'finished'
+          ? '<span class="mg-turn-text">🏁 ' + esc((state.players.find(function (p) { return p.id === state.winnerId; }) || {}).name || '') + '님 우승!</span>'
+          : '<span class="mg-turn-text">' + (myTurn ? '내 차례! 낼 카드를 고르세요.' : esc(turnName || '') + '님 차례…') + '</span>') +
+        '<span class="mg-round-chip">더미 ' + state.deckCount + '장 · ' + (state.direction === 1 ? '↻' : '↺') + '</span>' +
+      '</div>' +
+      '<div class="mg-oc-table">' +
+        '<div class="mg-oc-discard">' + (state.top ? ocCardHtml(state.top, { static: true }) : '') +
+          '<span class="mg-oc-color-chip c-' + state.activeColor + '">' + (COLOR_NAME[state.activeColor] || '') + '</span></div>' +
+        '<div class="mg-oc-draw">' +
+          '<div class="mg-oc-deck">🂠<span>' + state.deckCount + '</span></div>' +
+          (myTurn && state.status === 'playing'
+            ? '<button class="btn btn-sm" data-action="mini.ocDraw">카드 뽑기</button>'
+            : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="mg-rummi-hand-wrap"><div class="mg-rummi-hand-head">내 패 <span class="hint">' + (state.hand || []).length + '장</span></div>' +
+        '<div class="mg-oc-hand">' + hand + '</div></div>' +
+      (myTurn && state.status === 'playing'
+        ? '<p class="hint" style="margin-top:8px">같은 색이거나 같은 숫자(또는 같은 특수 카드)만 낼 수 있어요. 낼 카드가 없으면 1장 뽑으세요.</p>'
+        : '') +
+    '</div>';
+  }
+
+  /* ---------------- 선 긋기 땅따먹기 ---------------- */
+
+  function dotsBoard(state) {
+    const myTurn = state.status === 'playing' && state.turnPlayerId === state.youId;
+    const turnName = (state.players.find(function (p) { return p.id === state.turnPlayerId; }) || {}).name;
+    const colorOfId = function (id) {
+      const p = state.players.find(function (x) { return x.id === id; });
+      return p ? colorOf(p) : '#ccc';
+    };
+
+    const parts = [];
+    const at = function (v) { return 7 + v * 21.5; };
+    // 칸(땅)
+    for (let y = 0; y < state.boxCount; y++) {
+      for (let x = 0; x < state.boxCount; x++) {
+        const owner = state.boxes[y][x];
+        const me = owner && owner === state.youId;
+        const pname = owner ? ((state.players.find(function (p) { return p.id === owner; }) || {}).name || '') : '';
+        parts.push('<div class="mg-dots-box' + (owner ? ' is-owned' : '') + (me ? ' is-me' : '') + '"' +
+          ' style="left:' + (at(x) + 1.2) + '%;top:' + (at(y) + 1.2) + '%;width:19.1%;height:19.1%' +
+          (owner ? ';background:' + colorOfId(owner) : '') + '">' +
+          (owner ? '<span class="mg-dots-owner">' + pname + '</span>' : '') +
+          '</div>');
+      }
+    }
+    // 점
+    for (let y = 0; y < state.size; y++) {
+      for (let x = 0; x < state.size; x++) {
+        parts.push('<span class="mg-dots-dot" style="left:' + at(x) + '%;top:' + at(y) + '%"></span>');
+      }
+    }
+    // 가로 선
+    for (let y = 0; y < state.size; y++) {
+      for (let x = 0; x < state.boxCount; x++) {
+        const owner = state.hLines[y][x];
+        const drawable = myTurn && !owner && state.status === 'playing';
+        parts.push('<button class="mg-dots-line h' + (owner ? ' is-owned' : '') + '" data-action="mini.dotsLine" data-type="h" data-x="' + x + '" data-y="' + y + '"' +
+          (drawable ? '' : ' disabled') + ' style="left:' + (at(x) + 1.2) + '%;top:' + at(y) + '%' +
+          (owner ? ';background:' + colorOfId(owner) : '') + '"></button>');
+      }
+    }
+    // 세로 선
+    for (let y = 0; y < state.boxCount; y++) {
+      for (let x = 0; x < state.size; x++) {
+        const owner = state.vLines[y][x];
+        const drawable = myTurn && !owner && state.status === 'playing';
+        parts.push('<button class="mg-dots-line v' + (owner ? ' is-owned' : '') + '" data-action="mini.dotsLine" data-type="v" data-x="' + x + '" data-y="' + y + '"' +
+          (drawable ? '' : ' disabled') + ' style="left:' + at(x) + '%;top:' + (at(y) + 1.2) + '%' +
+          (owner ? ';background:' + colorOfId(owner) : '') + '"></button>');
+      }
+    }
+
+    const scores = state.players.map(function (p) {
+      return '<span class="mg-dots-score' + (p.isTurn ? ' is-turn' : '') + '">' +
+        '<i style="background:' + colorOf(p) + '"></i>' + esc(p.name) + ' <b>' + p.score + '</b>칸</span>';
+    }).join('');
+
+    return '<div class="mg-board mg-dots">' +
+      '<div class="mg-turn-bar ' + (myTurn ? 'is-me' : '') + '">' +
+        (state.status === 'finished'
+          ? '<span class="mg-turn-text">🏁 모든 땅을 나눴습니다. ' + esc((state.players.find(function (p) { return p.id === state.winnerId; }) || {}).name || '') + '님 우승!</span>'
+          : '<span class="mg-turn-text">' + (myTurn ? '내 차례! 선을 그으세요.' : esc(turnName || '') + '님 차례…') + '</span>') +
+        '<span class="mg-round-chip">' + state.claimed + '/' + state.totalBoxes + '칸</span>' +
+      '</div>' +
+      '<div class="mg-dots-stage"><div class="mg-dots-board">' + parts.join('') + '</div></div>' +
+      '<div class="mg-dots-scores">' + scores + '</div>' +
+      '<p class="hint">네 번째 선을 완성하면 그 칸이 내 땅이 되고 한 번 더 그을 수 있어요.</p>' +
+    '</div>';
+  }
+
   BG.miniBoards = {
     SEAT_COLORS: SEAT_COLORS,
     colorOf: colorOf,
     streams: streamsBoard,
     gomoku: gomokuBoard,
     liar: liarBoard,
-    yut: yutBoard
+    yut: yutBoard,
+    rummi: rummiBoard,
+    oldmaid: oldmaidBoard,
+    janggi: janggiBoard,
+    onecard: onecardBoard,
+    dots: dotsBoard
+  };
+
+  /* ---------------- 새 게임 동작 ---------------- */
+
+  function stateNow() {
+    return BG.mini && BG.mini.currentState ? BG.mini.currentState() : null;
+  }
+
+  function rerender() {
+    if (BG.mini && BG.mini.rerender) BG.mini.rerender();
+  }
+
+  function toast(text, kind) {
+    BG.ui.toast(text, kind || 'error');
+  }
+
+  BG.actions['mini.rummiTile'] = function (el) {
+    const id = el.getAttribute('data-id');
+    if (!id) return;
+    const idx = rummiUI.selected.indexOf(id);
+    if (idx === -1) rummiUI.selected.push(id);
+    else rummiUI.selected.splice(idx, 1);
+    rerender();
+  };
+
+  BG.actions['mini.rummiMeld'] = function () {
+    const state = stateNow();
+    if (!state) return;
+    const tiles = rummiUI.selected.map(function (id) { return handTileOf(state, id); }).filter(Boolean);
+    if (tiles.length < 3) { toast('세트는 3장 이상 골라 주세요.'); return; }
+    const check = window.Rummi && window.Rummi.validateSet(tiles);
+    if (!check || !check.ok) { toast('세트 규칙에 맞지 않습니다. (같은 숫자 다른 색 3~4장 · 같은 색 연속 3장 이상)'); return; }
+    rummiUI.pendingMelds.push(rummiUI.selected.slice());
+    rummiUI.selected = [];
+    rerender();
+  };
+
+  BG.actions['mini.rummiAdd'] = function (el) {
+    const state = stateNow();
+    if (!state) return;
+    const setId = el.getAttribute('data-set');
+    const set = (state.table || []).find(function (s) { return s.id === setId; });
+    if (!set) return;
+    if (rummiUI.selected.length === 0) { toast('붙일 타일을 먼저 골라 주세요.'); return; }
+    if (set.tiles.some(function (t) { return t.joker; })) { toast('조커가 들어간 세트에는 붙일 수 없습니다.'); return; }
+    const tiles = rummiUI.selected.map(function (id) { return handTileOf(state, id); }).filter(Boolean);
+    const check = window.Rummi && window.Rummi.validateSet(set.tiles.concat(tiles));
+    if (!check || !check.ok) { toast('이 세트에 붙이면 규칙에 맞지 않습니다.'); return; }
+    rummiUI.pendingAdds.push({ setId: setId, tileIds: rummiUI.selected.slice() });
+    rummiUI.selected = [];
+    rerender();
+  };
+
+  BG.actions['mini.rummiReset'] = function () {
+    rummiUI.selected = [];
+    rummiUI.pendingMelds = [];
+    rummiUI.pendingAdds = [];
+    rerender();
+  };
+
+  BG.actions['mini.rummiSubmit'] = function () {
+    if (!BG.mini || !BG.mini.playAction) return;
+    BG.mini.playAction('play', {
+      melds: rummiUI.pendingMelds.map(function (group) { return { tileIds: group.slice() }; }),
+      adds: rummiUI.pendingAdds.map(function (add) { return { setId: add.setId, tileIds: add.tileIds.slice() }; })
+    });
+  };
+
+  BG.actions['mini.rummiDraw'] = function () {
+    if (BG.mini && BG.mini.playAction) BG.mini.playAction('draw', {});
+  };
+
+  BG.actions['mini.omDraw'] = function (el) {
+    const index = Number(el.getAttribute('data-index'));
+    if (BG.mini && BG.mini.playAction) BG.mini.playAction('draw', { index: index });
+  };
+
+  BG.actions['mini.janggiCell'] = function (el) {
+    const state = stateNow();
+    if (!state || !BG.mini || !BG.mini.playAction) return;
+    if (state.status !== 'playing' || state.turnPlayerId !== state.youId) return;
+    const x = Number(el.getAttribute('data-x'));
+    const y = Number(el.getAttribute('data-y'));
+    const piece = state.board[y][x];
+    const legal = (state.legalMoves || []).filter(function (m) {
+      return janggiUI.selected && m.from.x === janggiUI.selected.x && m.from.y === janggiUI.selected.y;
+    });
+    const isTarget = legal.some(function (m) { return m.to.x === x && m.to.y === y; });
+    if (janggiUI.selected && isTarget) {
+      BG.mini.playAction('move', { from: janggiUI.selected, to: { x: x, y: y } });
+      return;
+    }
+    if (piece && state.youSide && piece.side === state.youSide) {
+      if (janggiUI.selected && janggiUI.selected.x === x && janggiUI.selected.y === y) janggiUI.selected = null;
+      else janggiUI.selected = { x: x, y: y };
+      rerender();
+      return;
+    }
+    if (janggiUI.selected) {
+      janggiUI.selected = null;
+      rerender();
+    }
+  };
+
+  BG.actions['mini.ocPlay'] = function (el) {
+    const cardId = el.getAttribute('data-card');
+    const state = stateNow();
+    if (!cardId || !state) return;
+    const card = (state.hand || []).find(function (c) { return c.id === cardId; });
+    if (!card) return;
+    if (card.type === 'wild') {
+      const colors = [
+        { id: 'red', name: '빨강' }, { id: 'blue', name: '파랑' },
+        { id: 'yellow', name: '노랑' }, { id: 'green', name: '초록' }
+      ];
+      BG.ui.modal(
+        '<div class="mg-color-pick"><h2>🎨 어떤 색으로 바꿀까요?</h2><div class="mg-color-grid">' +
+          colors.map(function (c) {
+            return '<button class="btn mg-color-btn c-' + c.id + '" data-action="mini.ocWild" data-card="' + cardId + '" data-color="' + c.id + '">' + c.name + '</button>';
+          }).join('') +
+        '</div></div>'
+      );
+      return;
+    }
+    if (BG.mini && BG.mini.playAction) BG.mini.playAction('play', { cardId: cardId });
+  };
+
+  BG.actions['mini.ocWild'] = function (el) {
+    const cardId = el.getAttribute('data-card');
+    const color = el.getAttribute('data-color');
+    BG.ui.closeModal();
+    if (BG.mini && BG.mini.playAction) BG.mini.playAction('play', { cardId: cardId, color: color });
+  };
+
+  BG.actions['mini.ocDraw'] = function () {
+    if (BG.mini && BG.mini.playAction) BG.mini.playAction('draw', {});
+  };
+
+  BG.actions['mini.dotsLine'] = function (el) {
+    const type = el.getAttribute('data-type');
+    const x = Number(el.getAttribute('data-x'));
+    const y = Number(el.getAttribute('data-y'));
+    if (BG.mini && BG.mini.playAction) BG.mini.playAction('line', { type: type, x: x, y: y });
   };
 })();

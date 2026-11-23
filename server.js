@@ -1711,6 +1711,14 @@ function createHub(options) {
             room.options.pieces = pieces;
           }
         }
+        // 숫자 타일 러미: 처음 등록 점수(15점 수업용 / 30점 기본)
+        if (msg.initialPoints !== undefined) {
+          const points = Number(msg.initialPoints);
+          if (points === 15 || points === 30) {
+            room.options = room.options || {};
+            room.options.initialPoints = points;
+          }
+        }
         broadcastRoom(room);
         return;
       }

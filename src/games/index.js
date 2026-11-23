@@ -20,8 +20,13 @@ const streams = require('./streams');
 const gomoku = require('./gomoku');
 const liar = require('./liar');
 const yut = require('./yut');
+const rummi = require('./rummi');
+const oldmaid = require('./oldmaid');
+const janggi = require('./janggi');
+const onecard = require('./onecard');
+const dots = require('./dots');
 
-const registry = [halligalli, bluemarble, streams, gomoku, liar, yut];
+const registry = [halligalli, bluemarble, streams, gomoku, liar, yut, rummi, oldmaid, janggi, onecard, dots];
 
 // 방을 만들지 않는 1인용 게임 (화면에서 바로 즐기고, 최고점·포인트만 서버에 남깁니다)
 const soloGames = [
@@ -30,6 +35,18 @@ const soloGames = [
     title: '1인용 미니 퍼즐',
     subtitle: '2048과 짝맞추기로 머리를 식히는 1인용 퍼즐',
     emoji: '🧩',
+    status: 'ready',
+    mode: 'solo',
+    grades: ['low', 'mid', 'high'],
+    playersText: '1명 · 혼자서',
+    minPlayers: 1,
+    maxPlayers: 1
+  },
+  {
+    id: 'sudoku',
+    title: '1인용 스도쿠',
+    subtitle: '4×4 · 6×6 · 9×9 난이도별 스도쿠로 혼자서 머리를 쓰는 퍼즐',
+    emoji: '🔢',
     status: 'ready',
     mode: 'solo',
     grades: ['low', 'mid', 'high'],

@@ -83,6 +83,103 @@
         '모서리(5·10번 자리)에 정확히 멈추면 지름길로 갑니다.',
         '말이 모두 완주하면 우승! 방장은 말 개수(2~4개)를 정할 수 있습니다.'
       ]
+    },
+    rummi: {
+      id: 'rummi',
+      title: '숫자 타일 러미',
+      emoji: '🔢',
+      desc: '1~13 숫자 타일과 조커로 같은 숫자 세트·연속 숫자 런을 만들어 테이블에 내놓습니다. 내 패를 먼저 다 내면 우승!',
+      players: '2~4명 · 모둠당 4명',
+      capacity: 4,
+      minPlayers: 2,
+      botSeats: 1,
+      accent: 'rummi',
+      rules: [
+        '타일은 1~13 × 4색(빨강·파랑·노랑·초록) + 조커 2장입니다.',
+        '같은 숫자 세트: 같은 숫자 다른 색 3~4장을 모아 테이블에 냅니다.',
+        '런: 같은 색 연속 숫자 3장 이상을 이어서 냅니다. (예: 초록 4·5·6)',
+        '처음 등록은 한 차례에 낸 타일 합이 기준 점수(기본 30점) 이상이어야 합니다. 방장이 15점으로 쉽게 바꿀 수 있어요.',
+        '조커는 한 세트에 1장까지, 어떤 빈자리든 대신할 수 있습니다. 조커가 든 세트에는 타일을 더할 수 없습니다.',
+        '테이블 세트에 내 타일을 이어 붙일 수 있습니다.',
+        '낼 타일이 없으면 더미에서 1장 뽑고 차례를 넘깁니다.',
+        '내 패를 먼저 다 내면 우승! 더미가 비면 남은 타일 점수가 가장 낮은 사람이 우승입니다.'
+      ]
+    },
+    oldmaid: {
+      id: 'oldmaid',
+      title: '도둑잡기',
+      emoji: '🃏',
+      desc: '동물 짝 카드를 맞춰 버리고, 마지막까지 도둑 카드를 들고 있지 않으면 됩니다. 앞사람 패에서 한 장씩 뽑아요!',
+      players: '2~5명 · 모둠당 4명',
+      capacity: 5,
+      minPlayers: 2,
+      botSeats: 2,
+      accent: 'oldmaid',
+      rules: [
+        '동물 짝 카드 12쌍(24장)과 도둑 카드 1장, 모두 25장으로 시작합니다.',
+        '카드를 나눠 받으면 같은 그림 짝은 바로 자동으로 버립니다.',
+        '내 차례에는 앞사람(왼쪽 친구)의 패에서 1장을 뽑습니다.',
+        '뽑은 카드가 내 패의 카드와 짝이 맞으면 두 장을 버립니다.',
+        '손패를 먼저 다 털어낸 사람이 1등! 마지막까지 도둑 카드를 들고 있는 사람이 꼴찌입니다.',
+        '2명이면 서로의 패에서 번갈아 뽑습니다.'
+      ]
+    },
+    janggi: {
+      id: 'janggi',
+      title: '전통 장기',
+      emoji: '♟️',
+      desc: '9×10 장기판에서 초와 한이 1:1로 겨룹니다. 차·포·마·상·사·졸·궁을 움직여 상대 궁을 잡으세요!',
+      players: '2명 · 모둠당 2명',
+      capacity: 2,
+      minPlayers: 2,
+      botSeats: 1,
+      accent: 'janggi',
+      rules: [
+        '9×10 장기판에서 초(아래)가 먼저 두고, 한(위)이 이어서 둡니다.',
+        '차는 가로·세로로 원하는 만큼, 포는 다리 하나를 넘어서만 움직이고 잡습니다. (포끼리는 잡지 못합니다)',
+        '마는 날일자, 상은 밭전자로 움직입니다. 가는 길이 막히면 못 갑니다.',
+        '사와 궁은 궁성(3×3) 안에서만, 졸·병은 앞이나 옆으로 한 칸씩 움직입니다.',
+        '상대 궁을 잡으면 바로 승리! 상대가 둘 곳이 없어도(외통수) 승리합니다.',
+        '내 궁이 공격받는 자리로는 움직일 수 없고, 두 궁이 마주 보게 두는 것도 안 됩니다.'
+      ]
+    },
+    onecard: {
+      id: 'onecard',
+      title: '컬러 숫자 카드',
+      emoji: '🎨',
+      desc: '같은 색이나 같은 숫자 카드를 내고, 특수 카드로 판을 흔들어 보세요. 손패를 먼저 0장으로 만들면 승리!',
+      players: '2~5명 · 모둠당 4명',
+      capacity: 5,
+      minPlayers: 2,
+      botSeats: 2,
+      accent: 'onecard',
+      rules: [
+        '4색(빨강·파랑·노랑·초록) × 1~9 숫자 카드와 특수 카드(점프·방향전환·+2 공격), 색 바꾸기 4장으로 시작합니다.',
+        '한 사람당 7장씩 나눠 받고, 바닥 카드와 같은 색이거나 같은 숫자(또는 같은 특수 카드)를 냅니다.',
+        '점프: 다음 사람 차례를 건너뜁니다. 방향전환: 순서가 반대로 바뀝니다. (2명일 때는 점프처럼)',
+        '+2 공격: 다음 사람이 2장을 뽑고 건너뜁니다.',
+        '색 바꾸기: 아무 때나 낼 수 있고, 바꿀 색을 고릅니다.',
+        '낼 카드가 없으면 더미에서 1장 뽑고 차례를 넘깁니다.',
+        '손패를 먼저 0장으로 만든 사람이 우승! 남은 사람은 카드가 적은 순서로 순위를 정합니다.'
+      ]
+    },
+    dots: {
+      id: 'dots',
+      title: '선 긋기 땅따먹기',
+      emoji: '✏️',
+      desc: '5×5 점 사이에 선을 그어 사각형을 완성하세요. 네 번째 선을 그으면 그 칸이 내 땅! 가장 많은 땅을 차지하면 승리!',
+      players: '2~4명 · 모둠당 4명',
+      capacity: 4,
+      minPlayers: 2,
+      botSeats: 2,
+      accent: 'dots',
+      rules: [
+        '5×5 점(4×4 칸) 보드에서 번갈아 선을 하나씩 긋습니다.',
+        '사각형의 네 번째 선을 완성하면 그 칸이 내 땅이 되고, 한 번 더 그을 수 있습니다.',
+        '땅을 먹지 못하면 다음 사람에게 차례가 넘어갑니다.',
+        '16칸을 모두 나누면 끝! 가장 많은 땅을 가진 사람이 우승합니다.',
+        '요령: 상대에게 3면이 열린 칸을 만들어 주지 마세요.'
+      ]
     }
   };
 
@@ -124,6 +221,11 @@
     if (id === 'gomoku') return window.Gomoku;
     if (id === 'liar') return window.Liar;
     if (id === 'yut') return window.Yut;
+    if (id === 'rummi') return window.Rummi;
+    if (id === 'oldmaid') return window.OldMaid;
+    if (id === 'janggi') return window.Janggi;
+    if (id === 'onecard') return window.OneCard;
+    if (id === 'dots') return window.Dots;
     return null;
   }
 
@@ -348,6 +450,16 @@
           }).join('') +
         '</select></label>';
     }
+    if (meta.id === 'rummi') {
+      const cur = Number((room.options && room.options.initialPoints) || 30);
+      if (!isHost) return '<p class="hint">처음 등록 점수: <b>' + cur + '점</b></p>';
+      return '<label class="field">처음 등록 점수' +
+        '<select class="input" data-action="mini.option" data-game="rummi" data-name="initialPoints">' +
+          [30, 15].map(function (n) {
+            return '<option value="' + n + '"' + (n === cur ? ' selected' : '') + '>' + n + '점' + (n === 15 ? ' (수업용 간단)' : ' (기본)') + '</option>';
+          }).join('') +
+        '</select></label>';
+    }
     if (meta.id === 'yut') {
       const pieces = (room.options && room.options.pieces) || 2;
       if (!isHost) return '<p class="hint">말 개수: <b>' + pieces + '개</b></p>';
@@ -469,6 +581,11 @@
       else if (meta.id === 'gomoku') status = p.stone === 1 ? '흑(먼저)' : '백';
       else if (meta.id === 'liar') status = p.hint ? '“' + p.hint + '”' : '힌트 전';
       else if (meta.id === 'yut') status = (p.finishedCount || 0) + '/' + p.pieces.length + ' 완주';
+      else if (meta.id === 'rummi') status = '남은 타일 ' + (p.count === undefined ? 0 : p.count) + '장';
+      else if (meta.id === 'oldmaid') status = p.finished ? (p.rank ? p.rank + '등' : '완료') : '카드 ' + (p.count || 0) + '장';
+      else if (meta.id === 'janggi') status = p.side === 'cho' ? '초(먼저)' : '한';
+      else if (meta.id === 'onecard') status = '카드 ' + (p.count || 0) + '장';
+      else if (meta.id === 'dots') status = (p.score || 0) + '칸';
       return '<div class="mg-player-row' + (game.turnPlayerId === p.id ? ' is-turn' : '') + '">' +
         (BG.avatars ? BG.avatars.html(p, 'xs') : '') +
         '<span class="mg-player-name">' + esc(p.name) + '</span>' +
@@ -694,6 +811,11 @@
     else if (gameId === 'gomoku') game = new engine.Game(players, options);
     else if (gameId === 'liar') game = new engine.Game(players, options);
     else if (gameId === 'yut') game = new engine.Game(players, Object.assign({ pieces: 2 }, options));
+    else if (gameId === 'rummi') game = new engine.Game(players, Object.assign({ options: { initialPoints: 15 } }, options));
+    else if (gameId === 'oldmaid') game = new engine.Game(players, options);
+    else if (gameId === 'janggi') game = new engine.Game(players, options);
+    else if (gameId === 'onecard') game = new engine.Game(players, options);
+    else if (gameId === 'dots') game = new engine.Game(players, options);
     if (!game) return;
     S.bot = {
       gameId: gameId,
@@ -770,6 +892,28 @@
     if (gameId === 'yut') {
       if (action === 'throw') return game.throwYut(playerId);
       if (action === 'move') return game.move(playerId, p.pieceId);
+      return { ok: false, reason: 'unknown_action' };
+    }
+    if (gameId === 'rummi') {
+      if (action === 'play') return game.play(playerId, p);
+      if (action === 'draw') return game.draw(playerId);
+      return { ok: false, reason: 'unknown_action' };
+    }
+    if (gameId === 'oldmaid') {
+      if (action === 'draw') return game.draw(playerId, p);
+      return { ok: false, reason: 'unknown_action' };
+    }
+    if (gameId === 'janggi') {
+      if (action === 'move') return game.move(playerId, p);
+      return { ok: false, reason: 'unknown_action' };
+    }
+    if (gameId === 'onecard') {
+      if (action === 'play') return game.play(playerId, p);
+      if (action === 'draw') return game.draw(playerId);
+      return { ok: false, reason: 'unknown_action' };
+    }
+    if (gameId === 'dots') {
+      if (action === 'line') return game.line(playerId, p);
       return { ok: false, reason: 'unknown_action' };
     }
     return { ok: false, reason: 'unknown_game' };
@@ -911,6 +1055,7 @@
     const name = el.getAttribute('data-name');
     if (name === 'category') BG.net.send({ t: 'option', category: el.value });
     else if (name === 'pieces') BG.net.send({ t: 'option', pieces: Number(el.value) });
+    else if (name === 'initialPoints') BG.net.send({ t: 'option', initialPoints: Number(el.value) });
   };
 
   BG.actions['mini.teacher'] = function (el) {
@@ -1017,7 +1162,9 @@
 
   function rerender() {
     const screen = screenName();
-    if (screen === 'mg.' + (routeGameId() || '') + '.room') {
+    if (screen === 'mg.' + (routeGameId() || '') + '.bot') {
+      renderBotScreen(routeGameId());
+    } else if (screen === 'mg.' + (routeGameId() || '') + '.room') {
       renderRoomScreen([S.room ? S.room.code : (BG.currentPath().split('/').pop() || '')]);
     } else if (screen === 'mg.' + (routeGameId() || '') + '.watch') {
       renderWatch([(S.room ? S.room.code : BG.currentPath().split('/').pop())]);
@@ -1209,6 +1356,9 @@
   BG.mini = {
     GAMES: GAMES,
     state: S,
-    startBotGame: startBotGame
+    startBotGame: startBotGame,
+    playAction: playAction,
+    currentState: currentGameState,
+    rerender: rerender
   };
 })();

@@ -2,12 +2,12 @@
   "name": "halligalli-web",
   "version": "1.0.0",
   "private": true,
-  "description": "보드게임천국 – 반 코드 기반 모둠 보드게임 (과일 딩동 · 3D 전국여행 마블 · 숫자 줄세우기 · 오목 · 라이어 추리게임 · 윷놀이 · 1인용 퍼즐)",
+  "description": "보드게임천국 – 반 코드 기반 모둠 보드게임 13종 (과일 딩동 · 3D 전국여행 마블 · 숫자 줄세우기 · 오목 · 라이어 · 윷놀이 · 숫자 타일 러미 · 도둑잡기 · 장기 · 컬러 숫자 카드 · 선 긋기 땅따먹기 · 1인용 퍼즐 · 1인용 스도쿠)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test --test-concurrency=1 test/*.test.js"
   },
   "engines": {
     "node": ">=18"
@@ -20,6 +20,9 @@
     "gomoku",
     "yutnori",
     "liar-game",
+    "rummikub-style",
+    "janggi",
+    "sudoku",
     "2048"
   ],
   "license": "MIT",
