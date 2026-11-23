@@ -410,7 +410,8 @@
   /* ---------------- 서버 응답 ---------------- */
 
   function createdModal(msg) {
-    const link = msg.link ? location.origin + msg.link : BG.classLink(msg.code);
+    // gh-pages 처럼 하위 경로에 올라간 경우에도 맞는 주소가 나오도록 직접 만듭니다.
+    const link = BG.classLink(msg.code);
     BG.ui.modal(
       '<div class="created-class">' +
         '<div class="created-emoji">🎉</div>' +
