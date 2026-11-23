@@ -81,6 +81,25 @@ function numberName(n) {
   return n + '번';
 }
 
+/**
+ * 학생 이름: 1~10자, 제어문자·중복 공백 정리.
+ * 비워 두면 번호만으로 표시합니다. (예: 이름 '김민수' + 번호 7 → '7번 김민수')
+ */
+function sanitizeStudentName(raw) {
+  const text = String(raw === undefined || raw === null ? '' : raw)
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200d\ufeff]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return Array.from(text).slice(0, 10).join('');
+}
+
+/** 화면·게임에 쓰는 표시 이름: '7번 김민수' (이름이 없으면 '7번') */
+function displayName(number, studentName) {
+  const name = sanitizeStudentName(studentName);
+  if (number === null || number === undefined) return name;
+  return numberName(number) + (name ? ' ' + name : '');
+}
+
 function randomClassCode() {
   let code = '';
   const bytes = crypto.randomBytes(CLASS_CODE_LENGTH);
@@ -353,7 +372,10 @@ function createHub(options) {
       if (row.isBot || row.number === null || row.number === undefined) return;
       const gain = pointsForRank(row.rank);
       let rec = map.get(row.number);
-      if (!rec) rec = { number: row.number, plays: 0, wins: 0, points: 0 };
+      if (!rec) rec = { number: row.number, name: '', plays: 0, wins: 0, points: 0 };
+      const seat = room.seats.find(function (s) { return s.id === row.id; });
+      const studentName = sanitizeStudentName(seat ? seat.studentName : '');
+      if (studentName) rec.name = studentName;
       rec.plays += 1;
       rec.points += gain;
       if (row.rank === 1) {
@@ -421,7 +443,7 @@ function createHub(options) {
       if (!map || !map.size) continue;
       const list = [];
       for (const rec of map.values()) {
-        list.push({ number: rec.number, plays: rec.plays, wins: rec.wins, points: rec.points });
+        list.push({ number: rec.number, name: rec.name || '', plays: rec.plays, wins: rec.wins, points: rec.points });
       }
       stats[code] = list;
     }
@@ -471,11 +493,13 @@ function createHub(options) {
         if (!item) continue;
         const number = Number(item.number);
         if (!Number.isInteger(number) || number < 1 || number > 99) continue;
-        const prev = map.get(number) || { number: number, plays: 0, wins: 0, points: 0 };
+        const prev = map.get(number) || { number: number, name: '', plays: 0, wins: 0, points: 0 };
         // 누적 기록은 줄어들지 않으므로 둘 중 큰 값을 남깁니다.
         // (Redis 가 잠깐 끊긴 동안 쌓인 기록도 잃지 않게)
+        if (item.name) prev.name = sanitizeStudentName(item.name);
         map.set(number, {
           number: number,
+          name: prev.name || '',
           plays: Math.max(prev.plays, Math.floor(Number(item.plays) || 0)),
           wins: Math.max(prev.wins, Math.floor(Number(item.wins) || 0)),
           points: Math.max(prev.points, Math.floor(Number(item.points) || 0))
@@ -806,6 +830,7 @@ function createHub(options) {
           id: s.id,
           name: s.name,
           number: s.number === undefined ? null : s.number,
+          studentName: s.studentName || '',
           ready: s.ready,
           isBot: s.isBot,
           connected: s.connected,
@@ -850,6 +875,7 @@ function createHub(options) {
             id: s.id,
             name: s.name,
             number: s.number === undefined ? null : s.number,
+            studentName: s.studentName || '',
             ready: s.ready,
             isBot: s.isBot,
             connected: s.connected,
@@ -1004,12 +1030,19 @@ function createHub(options) {
     if (!room) return sendError(ws, '방을 찾을 수 없습니다. 모둠 번호를 확인해 주세요.', 'no_room');
 
     // 번호(출석번호)로 입장합니다. (예전 닉네임 방식은 내부 테스트용으로만 허용)
-    const hasNumberField = msg.number !== undefined && msg.number !== null && String(msg.number).trim() !== '';
-    const number = hasNumberField ? sanitizeNumber(msg.number) : null;
+    // number 또는 studentNumber 어느 이름으로 와도 받습니다.
+    const rawNumber = msg.number !== undefined && msg.number !== null && String(msg.number).trim() !== ''
+      ? msg.number
+      : msg.studentNumber;
+    const hasNumberField = rawNumber !== undefined && rawNumber !== null && String(rawNumber).trim() !== '';
+    const number = hasNumberField ? sanitizeNumber(rawNumber) : null;
     if (hasNumberField && number === null) {
       return sendError(ws, '번호는 1~99 사이 숫자로 입력해 주세요.', 'bad_number');
     }
-    const name = number !== null ? numberName(number) : sanitizeNickname(msg.nickname);
+    const studentName = number !== null
+      ? sanitizeStudentName(msg.studentName !== undefined && msg.studentName !== null ? msg.studentName : msg.name)
+      : '';
+    const name = number !== null ? displayName(number, studentName) : sanitizeNickname(msg.nickname);
     if (!name) return sendError(ws, '출석번호를 입력해 주세요.', 'no_name');
 
     if (room.game && room.game.status === 'playing') {
@@ -1035,6 +1068,7 @@ function createHub(options) {
       id: 'p' + nextId(),
       token: crypto.randomBytes(12).toString('hex'),
       number: number,
+      studentName: studentName,
       name: name,
       ready: false,
       isBot: false,
@@ -1045,7 +1079,7 @@ function createHub(options) {
     room.seats.push(seat);
     if (!room.hostId) room.hostId = seat.id;
     attachSeat(ws, room, seat);
-    send(ws, { t: 'joined', gameId: room.gameId, classCode: room.classCode, code: room.code, token: seat.token, playerId: seat.id, number: seat.number, name: seat.name });
+    send(ws, { t: 'joined', gameId: room.gameId, classCode: room.classCode, code: room.code, token: seat.token, playerId: seat.id, number: seat.number, studentName: seat.studentName || '', name: seat.name });
     touch(room, name + '님이 ' + room.name + '에 입장했습니다.');
     broadcastRoom(room);
     broadcastOverview();
@@ -1075,7 +1109,7 @@ function createHub(options) {
     const seat = findSeatByToken(room, msg.token);
     if (!seat) return sendError(ws, '이전 자리를 찾을 수 없습니다. 다시 입장해 주세요.', 'no_seat');
     attachSeat(ws, room, seat);
-    send(ws, { t: 'joined', gameId: room.gameId, classCode: room.classCode, code: room.code, token: seat.token, playerId: seat.id, number: seat.number, name: seat.name, resumed: true });
+    send(ws, { t: 'joined', gameId: room.gameId, classCode: room.classCode, code: room.code, token: seat.token, playerId: seat.id, number: seat.number, studentName: seat.studentName || '', name: seat.name, resumed: true });
     touch(room, seat.name + '님이 다시 접속했습니다.');
     broadcastRoom(room);
     broadcastOverview();
@@ -1089,8 +1123,12 @@ function createHub(options) {
     if (ws.meta.room) return sendError(ws, '이미 방에 있습니다.', 'already_in_room');
     const classCode = resolveClassFor(ws, msg.classCode);
     if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
-    const number = msg.number !== undefined ? sanitizeNumber(msg.number) : null;
-    const name = number !== null ? numberName(number) : sanitizeNickname(msg.nickname);
+    const rawNumber = msg.number !== undefined ? msg.number : msg.studentNumber;
+    const number = rawNumber !== undefined ? sanitizeNumber(rawNumber) : null;
+    const studentName = number !== null
+      ? sanitizeStudentName(msg.studentName !== undefined && msg.studentName !== null ? msg.studentName : msg.name)
+      : '';
+    const name = number !== null ? displayName(number, studentName) : sanitizeNickname(msg.nickname);
     if (!name) return sendError(ws, '출석번호를 입력해 주세요.', 'no_name');
 
     const room = createCustomRoom(gameModule, name, classCode);
@@ -1098,6 +1136,7 @@ function createHub(options) {
       id: 'p' + nextId(),
       token: crypto.randomBytes(12).toString('hex'),
       number: number,
+      studentName: studentName,
       name: name,
       ready: true,
       isBot: false,
@@ -1108,7 +1147,7 @@ function createHub(options) {
     room.seats.push(seat);
     room.hostId = seat.id;
     attachSeat(ws, room, seat);
-    send(ws, { t: 'joined', gameId: room.gameId, classCode: room.classCode, code: room.code, token: seat.token, playerId: seat.id, number: seat.number, name: seat.name, created: true });
+    send(ws, { t: 'joined', gameId: room.gameId, classCode: room.classCode, code: room.code, token: seat.token, playerId: seat.id, number: seat.number, studentName: seat.studentName || '', name: seat.name, created: true });
     touch(room, name + '님이 방을 만들었습니다.');
     broadcastRoom(room);
     broadcastOverview();

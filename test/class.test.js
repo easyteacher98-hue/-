@@ -389,6 +389,92 @@ test('학생은 이름 대신 출석번호(1~99)로 입장하고, 화면 이름�
   }
 });
 
+test('학생은 출석번호와 이름을 함께 넣고, 화면·랭킹에 "번호 이름"으로 남는다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const made = await newClass(env, null, { name: '이름 반', pin: '4321' });
+    clients.push(made.client);
+    const code = made.code;
+
+    const a = await connect(env.ws);
+    clients.push(a);
+    await a.next('welcome');
+    a.send({ t: 'join', gameId: 'halligalli', code: '1', classCode: code, number: 7, studentName: '  김 민수 ' });
+    const joined = await a.next('joined');
+    assert.equal(joined.name, '7번 김 민수', '번호 + 이름으로 표시된다');
+    assert.equal(joined.number, 7);
+    assert.equal(joined.studentName, '김 민수', '이름만 따로 전달된다');
+    const room = await a.next(roomMsg('1', code));
+    assert.equal(room.room.seats[0].name, '7번 김 민수');
+    assert.equal(room.room.seats[0].studentName, '김 민수');
+
+    // 이름을 비우면 예전처럼 번호만 표시된다
+    const b = await connect(env.ws);
+    clients.push(b);
+    await b.next('welcome');
+    b.send({ t: 'join', gameId: 'halligalli', code: '1', classCode: code, number: 8 });
+    const joinedB = await b.next('joined');
+    assert.equal(joinedB.name, '8번');
+    assert.equal(joinedB.studentName, '');
+    b.send({ t: 'ready', ready: true });
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '1' &&
+        m.room.seats.some(function (s) { return s.number === 8 && s.ready; });
+    });
+
+    // 이름이 달라도 같은 번호는 같은 방에 들어올 수 없다
+    const c = await connect(env.ws);
+    clients.push(c);
+    await c.next('welcome');
+    c.send({ t: 'join', gameId: 'halligalli', code: '1', classCode: code, number: 7, studentName: '다른이름' });
+    const dup = await c.next('error');
+    assert.equal(dup.code, 'dup_number');
+
+    // 이름은 10자까지만 남는다
+    c.send({ t: 'join', gameId: 'halligalli', code: '2', classCode: code, number: 9, studentName: '가나다라마바사아자차카타파하' });
+    const joinedC = await c.next('joined');
+    assert.equal(joinedC.studentName, '가나다라마바사아자차');
+    assert.equal(joinedC.name, '9번 가나다라마바사아자차');
+
+    // 새 방을 만들 때도 번호 + 이름이 쓰인다
+    const d = await connect(env.ws);
+    clients.push(d);
+    await d.next('welcome');
+    d.send({ t: 'create', gameId: 'bluemarble', classCode: code, number: 11, studentName: '박지훈' });
+    const created = await d.next('joined');
+    assert.equal(created.name, '11번 박지훈');
+    assert.equal(created.studentName, '박지훈');
+
+    // 한 판이 끝나면 우리 반 랭킹에도 이름이 남는다
+    a.send({ t: 'start' });
+    await a.next(function (m) { return m.t === 'room' && m.room.code === '1' && m.room.status === 'playing'; });
+    const live = env.hub.getRoom('halligalli', '1', code);
+    const game = live.game;
+    const p7 = game.playerById(joined.playerId);
+    const p8 = game.playerById(joinedB.playerId);
+    p7.deck = [p7.deck[0] || { id: 'z1', fruit: 'lime', count: 1 }];
+    p7.pile = [];
+    p8.deck = [];
+    p8.pile = [];
+    p8.eliminated = true;
+    game.turn = p7.seat;
+    game.status = 'playing';
+    game.finishReason = null;
+    game.winnerId = null;
+    a.send({ t: 'action', action: 'flip' });
+
+    const result = await a.next('game_result');
+    assert.equal(result.ranking.find(function (r) { return r.number === 7; }).name, '7번 김 민수');
+    assert.equal(result.stats.find(function (r) { return r.number === 7; }).name, '김 민수');
+    assert.equal(result.stats.find(function (r) { return r.number === 8; }).name, '');
+    assert.equal(env.hub.classScores(code).find(function (r) { return r.number === 7; }).name, '김 민수');
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
 /* ---------------- 포인트 적립 ---------------- */
 
 test('게임이 끝나면 순위대로 승수·포인트가 우리 반에 쌓이고 랭킹으로 보인다', async function () {

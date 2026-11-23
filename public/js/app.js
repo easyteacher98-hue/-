@@ -13,7 +13,8 @@
     route: { name: 'portal', path: '/' },
     classCode: '',
     className: '',
-    number: ''
+    number: '',
+    name: ''
   };
 
   /* ---------- 저장소 ---------- */
@@ -116,6 +117,48 @@
   };
 
   BG.state.number = BG.numberFor(BG.state.classCode);
+
+  /* ---------- 학생 이름 (반별로 기억) ----------
+   * 입장할 때 번호와 함께 이름을 넣으면 화면·결과에 '7번 김민수'로 보입니다.
+   * 이름을 비워 두면 예전처럼 번호만('7번')으로 표시합니다.
+   */
+
+  function cleanStudentName(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .replace(/[\u0000-\u001f\u007f\u200b-\u200d\ufeff]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 10);
+  }
+
+  BG.cleanStudentName = cleanStudentName;
+
+  BG.nameFor = function (code) {
+    const map = storage.get('bg.names', {}) || {};
+    const key = cleanClassCode(code) || BG.state.classCode || '-';
+    return map[key] ? cleanStudentName(map[key]) : '';
+  };
+
+  BG.setNameFor = function (code, value) {
+    const clean = cleanStudentName(value);
+    const key = cleanClassCode(code) || BG.state.classCode || '-';
+    const map = storage.get('bg.names', {}) || {};
+    if (clean) map[key] = clean;
+    else delete map[key];
+    storage.set('bg.names', map);
+    BG.state.name = clean;
+    return clean;
+  };
+
+  /** 화면에 쓰는 표시 이름: '7번 김민수' (이름이 없으면 '7번', 번호도 없으면 '나') */
+  BG.studentLabel = function (number, name) {
+    const n = Number(String(number === undefined || number === null ? '' : number).trim());
+    const label = name === undefined ? BG.state.name : cleanStudentName(name);
+    if (Number.isInteger(n) && n >= 1 && n <= 99) return n + '번' + (label ? ' ' + label : '');
+    return label || '나';
+  };
+
+  BG.state.name = BG.nameFor(BG.state.classCode);
 
   /* ---------- 내 기록 (반 코드 + 출석번호, 브라우저 저장) ---------- */
 
@@ -322,6 +365,16 @@
       const digits = String(el.value || '').replace(/[^0-9]/g, '').slice(0, 2);
       if (el.value !== digits) el.value = digits;
       BG.setNumberFor(BG.state.classCode, digits);
+    }
+    if (el.id === 'student-name') {
+      // 이름은 10자까지, 공백/제어문자는 정리해서 반별로 기억합니다.
+      const clean = cleanStudentName(el.value);
+      if (el.value !== clean) el.value = clean;
+      BG.setNameFor(BG.state.classCode, clean);
+      const preview = document.getElementById('my-name-preview');
+      if (preview) {
+        preview.textContent = BG.studentLabel(BG.state.number, clean);
+      }
     }
     if (el.id === 'join-class-code' || el.id === 'class-code') {
       const clean = cleanClassCode(el.value);

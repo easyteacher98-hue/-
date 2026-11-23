@@ -113,7 +113,7 @@ test('첫 화면은 학생 [반 코드로 입장하기] 카드 하나만 크게 
     assert.doesNotMatch(window.document.body.textContent, /우리 반 만들기/);
     assert.equal(window.document.querySelectorAll('.game-card').length, 0, '첫 화면에는 게임 플레이 버튼이 없다');
     assert.ok(window.document.querySelector('#join-class-code'), '반 코드 입력');
-    assert.equal(window.document.querySelectorAll('.role-ready .ready-chip').length, 3, '학생 준비물 안내');
+    assert.equal(window.document.querySelectorAll('.role-ready .ready-chip').length, 4, '학생 준비물 안내 (반 코드 · 번호 · 이름 · 모둠)');
     assert.match(window.document.querySelector('.site-credit').textContent, /Made by easy/);
     assert.ok(window.document.querySelector('.site-credit .teacher-link'), '푸터의 교사용 링크');
 
@@ -281,6 +281,60 @@ test('출석번호가 1~99가 아니면 입장을 막고, 맞는 번호는 "12�
     await waitFor(function () { return window.document.querySelector('.seat-list'); }, '대기방');
     assert.match(window.document.querySelector('.seat-list').textContent, /12번/);
     assert.equal(window.localStorage.getItem('bg.numbers'), JSON.stringify({ [code]: '12' }));
+  } finally {
+    window.close();
+    await env.hub.close();
+  }
+});
+
+test('번호와 이름을 함께 넣으면 대기방에 "7번 김민수"로 보이고 이름은 반별로 기억된다', async function () {
+  const env = await boot();
+  const code = await createClass(env, '이름 검사 반', '5555');
+  const dom = await openPage(env.base + '/?class=' + code);
+  const window = dom.window;
+  try {
+    await waitFor(function () { return window.document.querySelector('.game-grid'); }, '게임 포털');
+    click(window, '.game-card[href="#/halligalli"]');
+    await waitFor(function () { return window.document.querySelector('#student-name'); }, '이름 입력');
+    await waitFor(function () { return window.BG.net.connected; }, '서버 연결', 4000);
+
+    const nameInput = window.document.querySelector('#student-name');
+    assert.equal(nameInput.getAttribute('maxlength'), '10', '이름은 10자까지');
+
+    type(window, '#number', '7');
+    type(window, '#student-name', '김민수');
+    assert.match(window.document.querySelector('#my-name-preview').textContent, /7번 김민수/);
+    assert.equal(window.localStorage.getItem('bg.names'), JSON.stringify({ [code]: '김민수' }));
+
+    click(window, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return window.document.querySelector('.seat-list'); }, '대기방');
+    assert.match(window.document.querySelector('.seat-list').textContent, /7번 김민수/);
+
+    assert.equal(dom.__errors.length, 0, 'JS 오류: ' + dom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    window.close();
+    await env.hub.close();
+  }
+});
+
+test('전국여행 마블 입장 화면에도 번호·이름 두 칸이 있고, 이름이 대기방에 보인다', async function () {
+  const env = await boot();
+  const code = await createClass(env, '마블 이름 반', '5566');
+  const dom = await openPage(env.base + '/?class=' + code);
+  const window = dom.window;
+  try {
+    await waitFor(function () { return window.document.querySelector('.game-grid'); }, '게임 포털');
+    click(window, '.game-card[href="#/bluemarble"]');
+    await waitFor(function () { return window.document.querySelector('#number'); }, '번호 입력');
+    assert.ok(window.document.querySelector('#student-name'), '이름 입력칸도 있다');
+    await waitFor(function () { return window.BG.net.connected; }, '서버 연결', 4000);
+
+    type(window, '#number', '4');
+    type(window, '#student-name', '이영희');
+    click(window, '.group-card [data-action="bm.enterGroup"]');
+    await waitFor(function () { return window.document.querySelector('.seat-list'); }, '대기방');
+    assert.match(window.document.querySelector('.seat-list').textContent, /4번 이영희/);
+    assert.equal(dom.__errors.length, 0, 'JS 오류: ' + dom.__errors.map(function (e) { return e.message; }).join(' | '));
   } finally {
     window.close();
     await env.hub.close();

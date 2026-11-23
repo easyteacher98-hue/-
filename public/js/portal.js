@@ -142,11 +142,12 @@
               : '<p class="hint">링크로 들어오면 반 코드를 넣지 않아도 바로 입장돼요.</p>') +
             '<button class="btn btn-primary btn-block role-submit role-submit-big" data-action="portal.enterClass">' +
               '입장하기 →</button>' +
-            '<p class="hint">입장한 뒤에는 이름 대신 <b>출석번호</b>만 고르면 됩니다.</p>' +
+            '<p class="hint">입장한 뒤에는 <b>출석번호</b>와 <b>이름</b>을 넣어요. (이름은 비워도 됩니다)</p>' +
             '<div class="role-ready">' +
-              '<span class="ready-title">준비물은 세 가지</span>' +
+              '<span class="ready-title">준비물은 네 가지</span>' +
               '<span class="ready-chips"><span class="ready-chip">📌 반 코드</span>' +
                 '<span class="ready-chip">🔢 출석번호</span>' +
+                '<span class="ready-chip">✏️ 내 이름</span>' +
                 '<span class="ready-chip">👥 내 모둠</span></span>' +
             '</div>' +
           '</div>' +
@@ -305,10 +306,10 @@
           '<div class="panel-title">🎒 내 기록</div>' +
           (BG.state.number
             ? '<div class="row" style="align-items:center;gap:10px">' +
-                BG.avatars.html({ number: BG.state.number, name: BG.state.number + '번' }, 'sm') +
-                '<b>' + esc(BG.state.number) + '번</b><span class="spacer"></span>' +
+                BG.avatars.html({ number: BG.state.number, name: BG.studentLabel() }, 'sm') +
+                '<b>' + esc(BG.studentLabel()) + '</b><span class="spacer"></span>' +
                 (BG.hg && BG.hg.myRecordLine ? BG.hg.myRecordLine() : '') + '</div>' +
-              '<p class="hint" style="margin-top:10px">게임에서 번호를 바꾸면 그 번호의 기록으로 보여요.</p>'
+              '<p class="hint" style="margin-top:10px">게임에서 번호·이름을 바꾸면 그 번호의 기록으로 보여요.</p>'
             : '<p class="hint">게임에 들어가 <b>출석번호</b>를 넣으면 내 승수·포인트가 여기에 쌓여요.</p>') +
           '<p class="hint" style="margin-top:8px">승수·포인트는 이 기기에도 저장되어, 서버가 다시 켜져도 내 기록은 남아 있어요.</p>' +
         '</section>' +
@@ -317,7 +318,7 @@
       '<section class="panel" style="margin-top:22px">' +
         '<div class="panel-title">🎮 입장 방법</div>' +
         '<ol class="rules-list">' +
-          '<li>원하는 게임(과일 딩동 · 전국여행 마블)을 고르고 <b>출석번호(1~99)</b>를 입력합니다.</li>' +
+          '<li>원하는 게임(과일 딩동 · 전국여행 마블)을 고르고 <b>출석번호(1~99)</b>와 <b>이름</b>을 입력합니다.</li>' +
           '<li>자기 <b>모둠(1~6모둠)</b>을 누르면 바로 그 모둠 방으로 들어가요.</li>' +
           '<li>모둠원이 모이면 방장이 <b>게임 시작</b>을 누릅니다.</li>' +
         '</ol>' +
@@ -351,6 +352,7 @@
       BG.setClass(code, '');
     }
     BG.state.number = BG.numberFor(code);
+    BG.state.name = BG.nameFor(code);
     classPortalHtml();
     BG.net.connect();
     if (BG.net.connected) BG.net.send({ t: 'classEnter', code: code });
@@ -490,6 +492,7 @@
     if (BG.hg) BG.hg.state.stats = [];
     BG.setClass(cls.code, cls.name);
     BG.state.number = BG.numberFor(cls.code);
+    BG.state.name = BG.nameFor(cls.code);
     BG.rememberClass(cls);
     if (msg.teacherToken) BG.setTeacherToken(cls.code, msg.teacherToken);
     createdModal({ code: cls.code, name: cls.name, link: msg.link });

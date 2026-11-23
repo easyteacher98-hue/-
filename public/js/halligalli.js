@@ -39,12 +39,19 @@
     return BG.avatars ? BG.avatars.html(who, size) : '';
   }
 
-  /** 출석번호(1~99)를 읽습니다. 이름/닉네임 대신 숫자만 씁니다. */
+  /** 출석번호(1~99)를 읽습니다. (이름은 따로 readName()으로 읽습니다) */
   function readNumber() {
     const el = document.getElementById('number');
     const fromInput = el ? String(el.value || '').replace(/[^0-9]/g, '').slice(0, 2) : '';
     if (fromInput) return BG.setNumberFor(BG.state.classCode, fromInput);
     return String(BG.state.number || BG.numberFor(BG.state.classCode) || '');
+  }
+
+  /** 내 이름(선택, 1~10자)을 읽습니다. 비워 두면 번호만으로 표시합니다. */
+  function readName() {
+    const el = document.getElementById('student-name');
+    if (el) return BG.setNameFor(BG.state.classCode, el.value);
+    return String(BG.state.name || BG.nameFor(BG.state.classCode) || '');
   }
 
   function validNumber(text) {
@@ -56,10 +63,9 @@
     return n + '번';
   }
 
-  /** 화면에 쓰는 내 표시 이름 (예: 3번) */
+  /** 화면에 쓰는 내 표시 이름 (예: 3번, 3번 김민수) */
   function myLabel() {
-    const n = validNumber(BG.state.number);
-    return n ? numberLabel(n) : '나';
+    return BG.studentLabel(BG.state.number, BG.state.name);
   }
 
   /** 내 브라우저에 쌓인 내 기록 (반 코드 + 번호) */
@@ -89,10 +95,11 @@
     } else {
       body = '<ul class="rank-list">' + list.map(function (rec) {
         const medal = rec.rank === 1 ? '🥇' : rec.rank === 2 ? '🥈' : rec.rank === 3 ? '🥉' : String(rec.rank);
+        const label = BG.studentLabel(rec.number, rec.name || '');
         return '<li class="rank-row' + (myNo === rec.number ? ' is-me' : '') + '">' +
           '<span class="rank-medal">' + medal + '</span>' +
-          avatar({ number: rec.number, name: rec.number + '번' }, 'xs') +
-          '<span class="rank-name">' + rec.number + '번' + (myNo === rec.number ? ' <span class="tag you">나</span>' : '') + '</span>' +
+          avatar({ number: rec.number, name: label }, 'xs') +
+          '<span class="rank-name">' + esc(label) + (myNo === rec.number ? ' <span class="tag you">나</span>' : '') + '</span>' +
           '<span class="rank-sub">' + rec.wins + '승 · ' + rec.plays + '판</span>' +
           '<span class="rank-points">' + rec.points + 'P</span>' +
           '</li>';
@@ -251,6 +258,7 @@
     const connBadge = BG.net.connected
       ? '<span class="badge ready">서버 연결됨</span>'
       : '<span class="badge finished">서버 연결 안 됨</span>';
+    const namePreviewLabel = validNumber(BG.state.number) ? myLabel() : '번호를 넣으면 여기에 보여요';
 
     const html =
       '<div class="entry-top">' +
@@ -270,19 +278,24 @@
 
       '<div class="panel number-panel" style="margin-bottom:16px">' +
         '<div class="row" style="gap:14px;align-items:flex-end;flex-wrap:wrap">' +
-          '<label class="field" style="flex:1;min-width:220px">내 출석번호 (1~99)' +
+          '<label class="field" style="flex:0 0 auto;min-width:170px">내 출석번호 (1~99)' +
             '<span class="row" style="gap:8px;flex-wrap:nowrap;align-items:center">' +
               '<span id="my-avatar-preview">' + avatar({ number: BG.state.number, name: myLabel() }, 'sm') + '</span>' +
               '<input id="number" class="input number-input" inputmode="numeric" pattern="[0-9]*" maxlength="2" ' +
-                'autocomplete="off" placeholder="예: 3" style="flex:1;max-width:150px" value="' +
+                'autocomplete="off" placeholder="예: 3" style="flex:1;max-width:120px" value="' +
                 esc(BG.state.number || '') + '">' +
               '<span class="number-suffix">번</span>' +
             '</span>' +
-            '<span class="hint">이름 대신 번호만 입력하면 돼요. 친구마다 다른 번호를 써 주세요.</span>' +
-            '<span class="hint">' + (validNumber(BG.state.number) ? '내 기록: ' + myRecordLine() : '번호를 넣으면 내 승수·포인트가 보여요.') + '</span>' +
+          '</label>' +
+          '<label class="field" style="flex:1;min-width:200px">내 이름 (선택)' +
+            '<input id="student-name" class="input name-input" maxlength="10" autocomplete="off" ' +
+              'placeholder="예: 김민수" value="' + esc(BG.state.name || '') + '">' +
+            '<span class="hint">번호와 이름이 함께 보여요: <b id="my-name-preview">' + esc(namePreviewLabel) + '</b></span>' +
           '</label>' +
           '<button class="btn btn-ghost" data-action="hg.rules">📖 게임 규칙 보기</button>' +
         '</div>' +
+        '<span class="hint" style="display:block;margin-top:10px">친구마다 다른 번호를 써 주세요. 이름을 비워 두면 번호만 보여요.</span>' +
+        '<span class="hint" style="display:block">' + (validNumber(BG.state.number) ? '내 기록: ' + myRecordLine() : '번호를 넣으면 내 승수·포인트가 보여요.') + '</span>' +
       '</div>' +
 
       '<h2 class="panel-title" style="margin:4px 0 12px">모둠 방 선택 <span class="hint">(1모둠 ~ 6모둠)</span></h2>' +
@@ -617,7 +630,7 @@
       return '<tr class="' + (row.rank === 1 ? 'is-first ' : '') + (isMe ? 'is-me' : '') + '">' +
         '<td class="res-rank">' + medalFor(row.rank) + '</td>' +
         '<td class="res-who"><span class="res-avatar">' + avatar({ number: row.number, name: row.name }, 'xs') + '</span>' +
-          '<span class="res-name">' + esc(row.number !== null && row.number !== undefined ? row.number + '번' : row.name) +
+          '<span class="res-name">' + esc(row.name || (row.number !== null && row.number !== undefined ? row.number + '번' : '')) +
             (isMe ? ' <span class="tag you">나</span>' : '') + (row.isBot ? ' 🤖' : '') + '</span></td>' +
         '<td class="res-cards">' + row.cards + '장' + (row.eliminated ? ' <span class="res-out">탈락</span>' : '') + '</td>' +
         '<td class="res-bells"><span class="ok">✓' + row.bells.correct + '</span> <span class="no">✗' + row.bells.wrong + '</span></td>' +
@@ -814,7 +827,7 @@
           const number = validNumber(readNumber());
           if (number) {
             S.pendingJoin = code;
-            BG.net.send({ t: 'join', gameId: 'halligalli', code: code, classCode: BG.state.classCode, number: number });
+            BG.net.send({ t: 'join', gameId: 'halligalli', code: code, classCode: BG.state.classCode, number: number, studentName: readName() });
           }
         }
       }
@@ -1044,7 +1057,7 @@
   function startBotGame(count, level) {
     stopBotLoop();
     const number = validNumber(BG.state.number) || 1;
-    const name = numberLabel(number);
+    const name = myLabel();
     const players = [{ id: 'me', name: name, number: number, isBot: false }];
     const names = HG.BOT_NAMES.slice();
     for (let i = 1; i < count; i++) {
@@ -1077,7 +1090,7 @@
           '<div>' +
             '<a class="back-link" href="#/halligalli">← 과일 딩동 입장</a>' +
             '<h1 class="page-title">🤖 AI 봇과 연습</h1>' +
-            '<p class="page-sub">서버에 접속하지 않아도 혼자서 4~5인 게임을 바로 테스트할 수 있습니다. (내 번호: ' + esc(myLabel()) + ')</p>' +
+            '<p class="page-sub">서버에 접속하지 않아도 혼자서 4~5인 게임을 바로 테스트할 수 있습니다. (내 이름: ' + esc(myLabel()) + ')</p>' +
           '</div>' +
           '<button class="btn btn-sm" data-action="hg.rules">📖 규칙</button>' +
         '</div>' +
@@ -1139,6 +1152,7 @@
       if (input) input.focus();
       return;
     }
+    const studentName = readName();
     if (!ensureConnected()) return;
     const now = Date.now();
     if (S.lastJoinAt[code] && now - S.lastJoinAt[code] < 2000) return;
@@ -1150,7 +1164,7 @@
     }
     S.pendingJoin = code;
     S.resumeSent[code] = false;
-    BG.net.send({ t: 'join', gameId: 'halligalli', code: code, classCode: BG.state.classCode, number: number });
+    BG.net.send({ t: 'join', gameId: 'halligalli', code: code, classCode: BG.state.classCode, number: number, studentName: studentName });
     BG.navigate('/halligalli/room/' + code);
   }
 
@@ -1206,7 +1220,7 @@
       return;
     }
     if (!ensureConnected()) return;
-    BG.net.send({ t: 'create', gameId: 'halligalli', classCode: BG.state.classCode, number: number });
+    BG.net.send({ t: 'create', gameId: 'halligalli', classCode: BG.state.classCode, number: number, studentName: readName() });
   };
 
   BG.actions['hg.teacher'] = function () {
@@ -1408,8 +1422,11 @@
   document.addEventListener('input', function (event) {
     const el = event.target;
     if (!el || el.id !== 'number') return;
+    const digits = el.value.replace(/[^0-9]/g, '');
     const preview = document.getElementById('my-avatar-preview');
-    if (preview) preview.innerHTML = avatar({ number: el.value.replace(/[^0-9]/g, ''), name: '나' }, 'sm');
+    if (preview) preview.innerHTML = avatar({ number: digits, name: '나' }, 'sm');
+    const namePreview = document.getElementById('my-name-preview');
+    if (namePreview) namePreview.textContent = BG.studentLabel(digits, BG.state.name);
   });
 
   // 첫 터치/클릭에서 브라우저의 소리 재생 권한을 확보합니다.
