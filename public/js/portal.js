@@ -154,6 +154,12 @@
             '<button class="btn btn-primary btn-block role-submit" data-action="portal.enterClass">' +
               '입장하기 →</button>' +
             '<p class="hint">입장한 뒤에는 이름 대신 <b>출석번호</b>만 고르면 됩니다.</p>' +
+            '<div class="role-ready">' +
+              '<span class="ready-title">준비물은 세 가지</span>' +
+              '<span class="ready-chips"><span class="ready-chip">📌 반 코드</span>' +
+                '<span class="ready-chip">🔢 출석번호</span>' +
+                '<span class="ready-chip">👥 내 모둠</span></span>' +
+            '</div>' +
           '</div>' +
         '</section>' +
       '</div>' +
@@ -245,6 +251,11 @@
         '</div>' +
         '<p class="hint" style="margin-top:10px">학생 링크: <span class="mono">' + esc(link) + '</span></p>' +
       '</section>' +
+
+      (BG.net.offline
+        ? '<div class="offline-note">🔌 지금은 실시간 서버에 연결할 수 없어 모둠 대전을 할 수 없어요. ' +
+            '<a href="#/halligalli/bot">🤖 AI 봇 연습</a>은 그대로 됩니다. (선생님은 서버가 켜진 주소로 접속해 주세요.)</div>'
+        : '') +
 
       '<h2 class="panel-title" style="margin:2px 0 12px">게임 선택</h2>' +
       '<div class="game-grid">' + games + '</div>' +
@@ -457,6 +468,10 @@
     const screen = document.body.dataset.screen;
     if (screen === 'portal') landingHtml();
     else if (screen === 'class') classPortalHtml();
+  });
+
+  BG.net.on('close', function () {
+    if (document.body.dataset.screen === 'class') classPortalHtml();
   });
 
   BG.net.on('error', function (msg) {

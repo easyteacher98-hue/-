@@ -1397,7 +1397,7 @@
     }
   };
 
-  /* ---------------- 닉네임 아바타 미리보기 ---------------- */
+  /* ---------------- 번호 아바타 미리보기 ---------------- */
 
   document.addEventListener('input', function (event) {
     const el = event.target;
