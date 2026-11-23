@@ -893,6 +893,12 @@ function createHub(options) {
    * PIN은 해시로만 저장하고, 응답에 담지 않습니다.
    */
   function createClassFor(ws, msg) {
+    if ((ws.meta.classCreates || 0) >= 5) {
+      return sendError(ws, '한 연결에서는 반을 5개까지 만들 수 있습니다. 새로고침 후 다시 시도해 주세요.', 'too_many_classes');
+    }
+    if (classes.size >= 500) {
+      return sendError(ws, '지금은 새 반을 만들 수 없습니다. 잠시 후 다시 시도해 주세요.', 'too_many_classes');
+    }
     const name = sanitizeClassName(msg.name);
     if (!name) return sendError(ws, '반 이름을 입력해 주세요. (예: 3학년 2반)', 'bad_class_name');
     const pin = sanitizePin(msg.pin);
@@ -914,6 +920,7 @@ function createHub(options) {
     classes.set(code, cls);
     initClassRooms(code);
     classStoreSave();
+    ws.meta.classCreates = (ws.meta.classCreates || 0) + 1;
 
     ws.meta.teacher = true;
     ws.meta.classCode = code;

@@ -112,6 +112,8 @@ test('맨 첫 화면은 [선생님: 우리 반 만들기]와 [학생: 반 코드
     assert.ok(window.document.querySelector('#class-name'), '반 이름 입력');
     assert.ok(window.document.querySelector('#class-pin'), '교사 PIN 입력');
     assert.ok(window.document.querySelector('#join-class-code'), '반 코드 입력');
+    assert.equal(window.document.querySelectorAll('.role-ready .ready-chip').length, 3, '학생 준비물 안내');
+    assert.match(window.document.querySelector('.site-credit').textContent, /Made by easy/);
 
     // 반 만들기 → 코드·전용 링크 안내 → 우리 반 열기
     type(window, '#class-name', '3학년 2반');
