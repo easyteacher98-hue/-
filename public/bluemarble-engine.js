@@ -1,5 +1,5 @@
 /*
- * 세계여행 마블 (모두의마블 스타일) 게임 엔진 (공용)
+ * 전국여행 마블 (모두의마블 스타일) 게임 엔진 (공용)
  * - Node.js(require)와 브라우저(window.BlueMarble) 양쪽에서 동작하는 UMD 모듈입니다.
  * - 서버(모둠 방)와 브라우저(AI 봇 연습)가 같은 규칙 코드를 사용합니다.
  * - 서버가 주사위를 굴리고 판정하므로, 화면(3D)은 결과만 연출합니다.
@@ -107,7 +107,7 @@
     { type: TILE_TYPES.GOLDEN, name: '황금열쇠', color: '#E7A93B' },
     cityTile('울산', '경상', 240000),
     { type: TILE_TYPES.TAX, name: '세금', desc: shortMoney(TAX_AMOUNT) + ' 납부', color: '#c98d6b' },
-    { type: TILE_TYPES.TRAVEL, name: '세계여행', desc: '황금열쇠 1장', color: CORNER_COLORS.travel },
+    { type: TILE_TYPES.TRAVEL, name: '전국일주', desc: '황금열쇠 1장', color: CORNER_COLORS.travel },
     cityTile('제주', '제주', 320000),
     cityTile('춘천', '강원', 180000),
     { type: TILE_TYPES.GOLDEN, name: '황금열쇠', color: '#E7A93B' },
@@ -184,10 +184,10 @@
     constructor(players, options) {
       const opts = options || {};
       if (!Array.isArray(players) || players.length < MIN_PLAYERS) {
-        throw new Error('세계여행 마블은 최소 ' + MIN_PLAYERS + '명이 필요합니다.');
+        throw new Error('전국여행 마블은 최소 ' + MIN_PLAYERS + '명이 필요합니다.');
       }
       if (players.length > MAX_PLAYERS) {
-        throw new Error('세계여행 마블은 최대 ' + MAX_PLAYERS + '명까지 참여할 수 있습니다.');
+        throw new Error('전국여행 마블은 최대 ' + MAX_PLAYERS + '명까지 참여할 수 있습니다.');
       }
       this.rng = opts.rng || Math.random;
       const rounds = Number(opts.maxRounds);
@@ -528,7 +528,7 @@
         return;
       }
       if (tile.type === TILE_TYPES.TRAVEL) {
-        this.pushLog('travel', player.name + '님 세계여행 칸! 황금열쇠를 1장 뽑습니다.');
+        this.pushLog('travel', player.name + '님 전국일주 칸! 황금열쇠를 1장 뽑습니다.');
         this.drawGoldenKey(player, 'travel');
         return;
       }

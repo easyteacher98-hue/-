@@ -1,5 +1,5 @@
 /*
- * 세계여행 마블 3D 보드 (Three.js)
+ * 전국여행 마블 3D 보드 (Three.js)
  * - 28칸 입체 보드 · 도시 라벨(캔버스 텍스처) · 별장/빌딩/호텔 · 3D 주사위 · 동물 색 말
  * - 서버가 판정한 주사위 눈에 정확히 맞춰 주사위가 멈춥니다.
  * - WebGL을 쓸 수 없는 기기(또는 테스트 환경)에서는 null을 돌려주고, 화면은 2D 보드로 대신합니다.
@@ -242,7 +242,7 @@
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const title = label || '세계여행 마블';
+    const title = label || '전국여행 마블';
     let titleSize = 62;
     ctx.font = '700 ' + titleSize + 'px "Jua", "Gowun Dodum", sans-serif';
     while (titleSize > 26 && ctx.measureText(title).width > S * 0.74) {
@@ -361,7 +361,7 @@
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       const canvas = this.renderer.domElement;
       canvas.className = 'bm3d-canvas';
-      canvas.setAttribute('aria-label', '세계여행 마블 3D 보드');
+      canvas.setAttribute('aria-label', '전국여행 마블 3D 보드');
       container.appendChild(canvas);
 
       this.camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 120);

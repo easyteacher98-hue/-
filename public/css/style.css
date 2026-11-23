@@ -1746,7 +1746,7 @@ body[data-screen="hg.bot"] .site-credit { padding-bottom: 10px; }
 .rank-row { flex-wrap: wrap; row-gap: 3px; }
 
 /* =========================================================
-   세계여행 마블 (3D) — 넓은 노트북 화면 + 3D 보드 + 2D 대체 보드
+   전국여행 마블 (3D) — 넓은 노트북 화면 + 3D 보드 + 2D 대체 보드
    ========================================================= */
 
 body[data-screen="bluemarble"] .app,
@@ -2090,7 +2090,7 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
 }
 .teacher-link:hover { color: var(--coral-dark); }
 
-/* 게임 카드의 세계여행 마블 장식 */
+/* 게임 카드의 전국여행 마블 장식 */
 .bm-deco {
   display: flex;
   align-items: center;

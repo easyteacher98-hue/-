@@ -2,7 +2,7 @@
   "name": "halligalli-web",
   "version": "1.0.0",
   "private": true,
-  "description": "보드게임천국 – 반 코드 기반 모둠 보드게임 (과일 딩동 · 세계여행 마블 3D · 6모둠 방 · 교사 관전 · AI 봇 연습)",
+  "description": "보드게임천국 – 반 코드 기반 모둠 보드게임 (과일 딩동 · 전국여행 마블 3D · 6모둠 방 · 교사 관전 · AI 봇 연습)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

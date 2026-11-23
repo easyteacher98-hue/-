@@ -62,7 +62,7 @@ test('보드는 28칸이고 도시 15 · 황금열쇠 4 · 세금 3 · 보너스
   assert.equal(count[BM.TILE_TYPES.TRAVEL], 1);
   assert.equal(count[BM.TILE_TYPES.PARK], 1);
 
-  // 코너 위치: 출발(0) · 무인도(7) · 세계여행(14) · 무료주차(21)
+  // 코너 위치: 출발(0) · 무인도(7) · 전국일주(14) · 무료주차(21)
   assert.equal(BM.BOARD[0].type, BM.TILE_TYPES.START);
   assert.equal(BM.BOARD[7].type, BM.TILE_TYPES.ISLAND);
   assert.equal(BM.BOARD[14].type, BM.TILE_TYPES.TRAVEL);
