@@ -30,6 +30,21 @@
     };
   }
 
+  /**
+   * 조사 선택: 숫자/한글 마지막 글자에 받침이 있으면 withBatchim('을'), 없으면 withoutBatchim('를').
+   * (10 → 십 → 을, 2 → 이 → 를 처럼 숫자도 소리대로 고릅니다)
+   */
+  const DIGIT_BATCHIM = { 0: true, 1: true, 2: false, 3: true, 4: false, 5: false, 6: true, 7: true, 8: true, 9: false };
+  function josa(value, withBatchim, withoutBatchim) {
+    const text = String(value === undefined || value === null ? '' : value);
+    if (!text) return withoutBatchim;
+    const last = text.charAt(text.length - 1);
+    if (last >= '0' && last <= '9') return DIGIT_BATCHIM[last] ? withBatchim : withoutBatchim;
+    const code = last.charCodeAt(0);
+    if (code < 0xac00 || code > 0xd7a3) return withoutBatchim;
+    return ((code - 0xac00) % 28) ? withBatchim : withoutBatchim;
+  }
+
   function shuffled(list, rng) {
     const out = list.slice();
     for (let i = out.length - 1; i > 0; i--) {
@@ -153,7 +168,7 @@
         player.lastSlot = null;
         if (!validSlots(player.track, value).length) {
           player.discarded += 1;
-          self.pushLog('···' + player.name + '님은 ' + value + '을(를) 놓을 칸이 없어 이번 판을 쉽니다.');
+          self.pushLog('···' + player.name + '님은 ' + value + josa(value, '을', '를') + ' 놓을 칸이 없어 이번 판을 쉽니다.');
           return;
         }
         self.waiting.push(player.id);
@@ -193,7 +208,7 @@
     player.filled = filledCount(player.track);
     player.score = longestRun(player.track);
     this.lastMove = { seq: this.seq + 1, playerId: playerId, value: this.value, slot: index };
-    this.pushLog(player.name + '님이 ' + this.value + '을(를) ' + (index + 1) + '번째 칸에 놓았습니다. (이어진 구간 ' + player.score + ')');
+    this.pushLog(player.name + '님이 ' + this.value + josa(this.value, '을', '를') + ' ' + (index + 1) + '번째 칸에 놓았습니다. (이어진 구간 ' + player.score + ')');
     this.waiting = this.waiting.filter(function (id) { return id !== playerId; });
     if (player.filled >= TRACK) this.pushLog('🎉 ' + player.name + '님의 트랙 20칸이 모두 찼습니다!');
     this.advanceIfReady();
@@ -345,6 +360,7 @@
     MIN_PLAYERS: MIN_PLAYERS,
     MAX_PLAYERS: MAX_PLAYERS,
     createRng: createRng,
+    josa: josa,
     shuffled: shuffled,
     longestRun: longestRun,
     filledCount: filledCount,

@@ -100,6 +100,17 @@
     };
   }
 
+  const DIGIT_BATCHIM = { 0: true, 1: true, 2: false, 3: true, 4: false, 5: false, 6: true, 7: true, 8: true, 9: false };
+  function josa(value, withBatchim, withoutBatchim) {
+    const text = String(value === undefined || value === null ? '' : value);
+    if (!text) return withoutBatchim;
+    const last = text.charAt(text.length - 1);
+    if (last >= '0' && last <= '9') return DIGIT_BATCHIM[last] ? withBatchim : withoutBatchim;
+    const code = last.charCodeAt(0);
+    if (code < 0xac00 || code > 0xd7a3) return withoutBatchim;
+    return ((code - 0xac00) % 28) ? withBatchim : withoutBatchim;
+  }
+
   function shuffled(list, rng) {
     const out = list.slice();
     for (let i = out.length - 1; i > 0; i--) {
@@ -272,7 +283,7 @@
     if (this.guessOptions.indexOf(word) === -1) return { ok: false, reason: 'bad_word' };
     this.guess = word;
     if (word === this.secret) {
-      this.pushLog('😈 라이어가 제시어 “' + this.secret + '”를 맞혔습니다! 라이어의 승리!');
+      this.pushLog('😈 라이어가 제시어 “' + this.secret + '”' + josa(this.secret, '을', '를') + ' 맞혔습니다! 라이어의 승리!');
       return this.finishWithLiarWin('guessed');
     }
     this.pushLog('🎉 라이어가 “' + word + '”라고 잘못 말했습니다. 시민들의 승리! (제시어: ' + this.secret + ')');
@@ -446,6 +457,7 @@
     CATEGORIES: CATEGORIES,
     LIAR_HINTS: LIAR_HINTS,
     createRng: createRng,
+    josa: josa,
     categoryById: categoryById,
     Game: Game,
     BotDriver: BotDriver

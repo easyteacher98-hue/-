@@ -9,6 +9,12 @@
 
   const SEAT_COLORS = ['#e0583c', '#2f7fbf', '#2f9b6a', '#9b5fc0', '#d4912a', '#c94f88'];
 
+  function josaOf(value) {
+    const Streams = window.Streams;
+    if (Streams && Streams.josa) return Streams.josa(value, '을', '를');
+    return '을(를)';
+  }
+
   function colorOf(player) {
     if (!player) return SEAT_COLORS[0];
     if (player.number !== null && player.number !== undefined && player.number !== '') {
@@ -44,7 +50,7 @@
           ? '<span class="mg-turn-text">🏁 게임 끝! 가장 긴 줄이 우승입니다.</span>'
           : '<span class="mg-num-tile">' + (value === null ? '?' : value) + '</span>' +
             '<span class="mg-turn-text">' + (isMyTurn
-              ? '내 차례! <b>' + value + '</b>을(를) 놓을 칸을 누르세요.'
+              ? '내 차례! <b>' + value + '</b>' + josaOf(value) + ' 놓을 칸을 누르세요.'
               : '<b>' + value + '</b> — 다른 친구가 놓는 중…') + '</span>' +
             '<span class="mg-round-chip">' + state.round + '번째 숫자 · 남은 ' + state.remaining + '장</span>') +
       '</div>';
@@ -82,6 +88,20 @@
     const myTurn = state.status === 'playing' && state.turnPlayerId === state.youId;
     const winSet = {};
     (state.winLine || []).forEach(function (c) { winSet[c.x + ',' + c.y] = true; });
+    // 바둑판 선: 돌(칸 가운데)이 선의 교차점에 오도록 0.5 간격으로 그립니다.
+    const lines = [];
+    for (let i = 0; i < state.size; i++) {
+      const p = i + 0.5;
+      lines.push('<line x1="0.5" y1="' + p + '" x2="' + (state.size - 0.5) + '" y2="' + p + '" />');
+      lines.push('<line x1="' + p + '" y1="0.5" x2="' + p + '" y2="' + (state.size - 0.5) + '" />');
+    }
+    const stars = [[3, 3], [11, 3], [7, 7], [3, 11], [11, 11]].map(function (c) {
+      return '<circle cx="' + (c[0] + 0.5) + '" cy="' + (c[1] + 0.5) + '" r="0.12" />';
+    }).join('');
+    const gridSvg = '<svg class="mg-gomoku-lines" viewBox="0 0 ' + state.size + ' ' + state.size +
+      '" preserveAspectRatio="none" aria-hidden="true"><g class="mg-gomoku-strokes">' + lines.join('') + '</g>' +
+      '<g class="mg-gomoku-stars">' + stars + '</g></svg>';
+
     const cells = [];
     for (let y = 0; y < state.size; y++) {
       for (let x = 0; x < state.size; x++) {
@@ -109,7 +129,7 @@
             '<span class="mg-turn-text">' + (myTurn ? '내 차례! 돌을 놓을 자리를 누르세요.' : esc(turnName || '') + ' 차례…') + '</span>' +
             '<span class="mg-round-chip">' + state.moves + '수</span>') +
       '</div>' +
-      '<div class="mg-gomoku-wrap"><div class="mg-gomoku-grid">' + cells.join('') + '</div></div>' +
+      '<div class="mg-gomoku-wrap"><div class="mg-gomoku-grid">' + gridSvg + cells.join('') + '</div></div>' +
       '<div class="mg-gomoku-foot">' +
         '<span class="mg-legend"><i class="dot black"></i>흑 ' + esc((state.players[0] || {}).name || '') + '</span>' +
         '<span class="mg-legend"><i class="dot white"></i>백 ' + esc((state.players[1] || {}).name || '') + '</span>' +
@@ -288,21 +308,29 @@
       } else if (myTurn && state.phase === 'move') {
         const groups = [];
         const seen = {};
+        const waiting = [];
         (myPlayer ? myPlayer.pieces : []).forEach(function (piece) {
           if (piece.finished) return;
-          const key = piece.path ? piece.path + ':' + piece.idx : 'wait';
+          if (!piece.path) {
+            // 출발점의 말은 한 번에 한 개씩 나갑니다.
+            waiting.push(piece);
+            return;
+          }
+          const key = piece.path + ':' + piece.idx;
           if (seen[key]) return;
           seen[key] = true;
           const group = (myPlayer.pieces).filter(function (other) {
-            if (other.finished) return false;
-            if (!piece.path) return !other.path;
+            if (other.finished || !other.path) return false;
             return other.path === piece.path && other.idx === piece.idx;
           });
           groups.push({ key: key, piece: piece, count: group.length });
         });
+        waiting.forEach(function (piece, i) {
+          groups.unshift({ key: 'wait' + i, piece: piece, count: 1, waiting: true });
+        });
         actionBox = '<div class="mg-move-box"><div class="mg-phase-title">옮길 말을 고르세요</div>' +
           '<div class="mg-move-grid">' + groups.map(function (g) {
-            const from = g.piece.path === null ? '출발점' : Y.NODE_LABELS[g.piece.node] ? g.piece.node + '번 자리' : g.piece.node + '번 자리';
+            const from = g.piece.path === null ? '출발점' : g.piece.node + '번 자리';
             let to = '완주';
             if (Y && state.throwInfo) {
               const result = Y.advance(g.piece.path ? { path: g.piece.path, idx: g.piece.idx } : null, state.throwInfo.steps);

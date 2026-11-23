@@ -2348,24 +2348,30 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
 
 .mg-gomoku-wrap { display: flex; justify-content: center; }
 .mg-gomoku-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(15, 1fr);
   width: min(100%, 640px);
   aspect-ratio: 1 / 1;
-  background:
-    linear-gradient(#c9a26b, #c9a26b) center / 100% 2px no-repeat,
-    linear-gradient(#c9a26b, #c9a26b) center / 2px 100% no-repeat,
-    repeating-linear-gradient(to right, #dcb98a 0 1px, transparent 1px 6.6666%),
-    repeating-linear-gradient(to bottom, #dcb98a 0 1px, transparent 1px 6.6666%),
-    linear-gradient(160deg, #f6e3c6, #e9cfa8);
+  background: linear-gradient(160deg, #f6e3c6, #e9cfa8);
   border: 3px solid #b98a52;
   border-radius: 12px;
   padding: 0;
   overflow: hidden;
   touch-action: manipulation;
 }
+.mg-gomoku-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.mg-gomoku-strokes line { stroke: #c9a26b; stroke-width: 0.035; }
+.mg-gomoku-stars circle { fill: #b98a52; }
 .mg-cell {
   position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
   padding: 0;
@@ -2610,6 +2616,7 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
   color: #5d4a3c;
   transition: background 0.12s ease;
 }
+.pz-tile.pz-empty { background: #f7ecdd; }
 .pz-tile.v2 { background: #fff6e4; }
 .pz-tile.v4 { background: #ffeccd; }
 .pz-tile.v8 { background: #ffdba8; color: #7a4a0d; }

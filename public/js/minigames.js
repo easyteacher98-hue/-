@@ -661,7 +661,7 @@
       '<div class="panel center-panel">' +
         '<div class="mg-head-emoji">🤖</div>' +
         '<h1 class="entry-title">' + meta.emoji + ' AI 봇 연습</h1>' +
-        '<p class="page-sub">혼자서 ' + esc(meta.title) + '을(를) 연습해 보세요. 친구 없이도 바로 시작할 수 있어요.</p>' +
+        '<p class="page-sub">혼자서 <b>' + esc(meta.title) + '</b> 연습을 해 보세요. 친구 없이도 바로 시작할 수 있어요.</p>' +
         '<label class="field" style="max-width:260px;margin:0 auto 14px">인원' +
           '<select id="mg-bot-count" class="input">' +
             counts.map(function (n) {
@@ -684,7 +684,7 @@
     if (!meta || !engine) { BG.ui.toast('지금은 연습을 시작할 수 없습니다.', 'error'); return; }
     const label = myLabel();
     const players = [{ id: 'me', name: label, number: validNumber(BG.state.number) || null, isBot: false }];
-    const botNames = ['봇 하나', '봇 둘', '봇 셋', '봇 넷', '봇 다섯'];
+    const botNames = ['로봇 별이', '로봇 솔이', '로봇 보리', '로봇 루나', '로봇 콩이'];
     for (let i = 1; i < count; i++) {
       players.push({ id: 'bot' + i, name: botNames[i - 1] || ('봇' + i), number: null, isBot: true });
     }

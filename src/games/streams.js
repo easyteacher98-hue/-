@@ -31,7 +31,7 @@ module.exports = {
   maxPlayers: ST.MAX_PLAYERS,
   groupCapacity: Math.min(Number(process.env.GROUP_CAPACITY || 4), ST.MAX_PLAYERS),
   groupCount: 6,
-  botNames: ['숫자봇 하나', '숫자봇 둘', '숫자봇 셋'],
+  botNames: ['숫자봇 셈이', '숫자봇 순서', '숫자봇 열이'],
   rules: [
     '1~30 숫자 타일을 섞어 한 장씩 공개합니다.',
     '같은 숫자를 모두가 동시에 자기 20칸 트랙의 빈칸에 놓습니다.',

@@ -147,6 +147,14 @@
     BG.net.send({ t: 'adminStats', code: code });
   };
 
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter') return;
+    const el = event.target;
+    if (!el || el.id !== 'admin-code') return;
+    event.preventDefault();
+    BG.actions['admin.login']();
+  });
+
   BG.actions['admin.refresh'] = function () {
     if (!S.code) return;
     BG.net.send({ t: 'adminStats', code: S.code });

@@ -218,7 +218,7 @@
   }
 
   function tileClass(value) {
-    if (!value) return 'empty';
+    if (!value) return 'pz-empty';
     if (value <= 2048) return 'v' + value;
     return 'v-big';
   }
