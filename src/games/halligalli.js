@@ -89,6 +89,7 @@ module.exports = {
         return {
           id: p.id,
           name: p.name,
+          number: p.number === undefined ? null : p.number,
           isBot: p.isBot,
           deckCount: p.deck.length,
           totalCards: p.deck.length + p.pile.length,

@@ -22,7 +22,11 @@
     seenTop: {},
     pendingResetCode: null,
     fx: { lastBellAt: null, freshAt: null, soundAt: null, kind: 'correct' },
-    bot: { active: false, game: null, driver: null, timer: null, level: 'normal', count: 4 }
+    bot: { active: false, game: null, driver: null, timer: null, level: 'normal', count: 4 },
+    teacherBound: false,
+    stats: [],
+    lastResult: null,
+    resultShown: {}
   };
 
   /* ---------------- 공통 도우미 ---------------- */
@@ -35,15 +39,66 @@
     return BG.avatars ? BG.avatars.html(who, size) : '';
   }
 
-  function readNickname() {
-    const el = document.getElementById('nickname');
-    const fromInput = el && el.value ? el.value.trim() : '';
-    if (fromInput) {
-      BG.state.nickname = fromInput.slice(0, 12);
-      BG.storage.set('bg.nickname', BG.state.nickname);
-      return BG.state.nickname;
+  /** 출석번호(1~99)를 읽습니다. 이름/닉네임 대신 숫자만 씁니다. */
+  function readNumber() {
+    const el = document.getElementById('number');
+    const fromInput = el ? String(el.value || '').replace(/[^0-9]/g, '').slice(0, 2) : '';
+    if (fromInput) return BG.setNumberFor(BG.state.classCode, fromInput);
+    return String(BG.state.number || BG.numberFor(BG.state.classCode) || '');
+  }
+
+  function validNumber(text) {
+    const n = Number(String(text || '').trim());
+    return Number.isInteger(n) && n >= 1 && n <= 99 ? n : null;
+  }
+
+  function numberLabel(n) {
+    return n + '번';
+  }
+
+  /** 화면에 쓰는 내 표시 이름 (예: 3번) */
+  function myLabel() {
+    const n = validNumber(BG.state.number);
+    return n ? numberLabel(n) : '나';
+  }
+
+  /** 내 브라우저에 쌓인 내 기록 (반 코드 + 번호) */
+  function myRecord() {
+    const n = validNumber(BG.state.number);
+    return n ? BG.myRecord(BG.state.classCode, n) : { wins: 0, points: 0, plays: 0 };
+  }
+
+  function myRecordLine() {
+    const rec = myRecord();
+    return '<span class="my-record">' +
+      '<span class="record-chip">🏆 <b>' + rec.wins + '</b>승</span>' +
+      '<span class="record-chip">⭐ <b>' + rec.points + '</b>P</span>' +
+      '<span class="record-chip muted">' + rec.plays + '판</span>' +
+      '</span>';
+  }
+
+  /** 우리 반 포인트 랭킹 (서버 집계) */
+  function classRankingHtml(limit, bare) {
+    const list = (S.stats || []).slice(0, limit || 10);
+    const myNo = validNumber(BG.state.number);
+    const head = '<div class="panel-title">🏆 우리 반 포인트 랭킹' +
+      (bare ? '' : ' <span class="hint">(이번 수업 기록 · 서버를 다시 켜면 초기화)</span>') + '</div>';
+    let body;
+    if (!list.length) {
+      body = '<p class="hint">아직 기록이 없어요. 한 판이 끝나면 1등 +100P, 2등 +50P, 3등 +30P, 나머지 +10P가 쌓입니다.</p>';
+    } else {
+      body = '<ul class="rank-list">' + list.map(function (rec) {
+        const medal = rec.rank === 1 ? '🥇' : rec.rank === 2 ? '🥈' : rec.rank === 3 ? '🥉' : String(rec.rank);
+        return '<li class="rank-row' + (myNo === rec.number ? ' is-me' : '') + '">' +
+          '<span class="rank-medal">' + medal + '</span>' +
+          avatar({ number: rec.number, name: rec.number + '번' }, 'xs') +
+          '<span class="rank-name">' + rec.number + '번' + (myNo === rec.number ? ' <span class="tag you">나</span>' : '') + '</span>' +
+          '<span class="rank-sub">' + rec.wins + '승 · ' + rec.plays + '판</span>' +
+          '<span class="rank-points">' + rec.points + 'P</span>' +
+          '</li>';
+      }).join('') + '</ul>';
     }
-    return (BG.state.nickname || '').trim();
+    return bare ? head + body : '<div class="panel rank-panel">' + head + body + '</div>';
   }
 
   function getSeat() {
@@ -173,7 +228,7 @@
     if (!S.room || S.room.gameId !== 'halligalli') return '';
     return (
       '<div class="my-room-banner">' +
-        avatar({ name: BG.state.nickname || '나' }, 'sm') +
+        avatar({ number: BG.state.number, name: myLabel() }, 'sm') +
         '<span>지금 <b>' + esc(S.room.name) + '</b>에 참여 중이에요.</span>' +
         '<span class="spacer"></span>' +
         '<button class="btn btn-sm btn-primary" data-action="hg.reenter" data-code="' + esc(S.room.code) + '">다시 들어가기</button>' +
@@ -183,6 +238,11 @@
   }
 
   function renderEntry() {
+    if (!BG.state.classCode) {
+      // 반 코드 없이 들어오면 첫 화면에서 반을 고르게 합니다.
+      BG.navigate('/');
+      return;
+    }
     BG.net.connect();
     const groups = S.rooms.filter(function (r) { return r.gameId === 'halligalli'; });
     const groupCards = groups.length
@@ -194,8 +254,9 @@
 
     const html =
       '<div class="entry-top">' +
-        '<a class="back-link" href="#/">← 게임 선택</a>' +
+        '<a class="back-link" href="#/class/' + esc(BG.state.classCode) + '">← 게임 선택</a>' +
         '<span class="spacer"></span>' +
+        '<span class="badge">' + esc(BG.className() || BG.state.classCode) + '</span>' +
         connBadge +
       '</div>' +
       '<div class="screen-head">' +
@@ -207,14 +268,18 @@
 
       myRoomBanner() +
 
-      '<div class="panel" style="margin-bottom:16px">' +
-        '<div class="row" style="gap:14px;align-items:flex-end">' +
-          '<label class="field" style="flex:1;min-width:200px">닉네임 (최대 12자)' +
+      '<div class="panel number-panel" style="margin-bottom:16px">' +
+        '<div class="row" style="gap:14px;align-items:flex-end;flex-wrap:wrap">' +
+          '<label class="field" style="flex:1;min-width:220px">내 출석번호 (1~99)' +
             '<span class="row" style="gap:8px;flex-wrap:nowrap;align-items:center">' +
-              '<span id="my-avatar-preview">' + avatar(BG.state.nickname || '나', 'sm') + '</span>' +
-              '<input id="nickname" class="input" maxlength="12" autocomplete="nickname" placeholder="예: 지원" style="flex:1" value="' +
-                esc(BG.state.nickname || '') + '">' +
+              '<span id="my-avatar-preview">' + avatar({ number: BG.state.number, name: myLabel() }, 'sm') + '</span>' +
+              '<input id="number" class="input number-input" inputmode="numeric" pattern="[0-9]*" maxlength="2" ' +
+                'autocomplete="off" placeholder="예: 3" style="flex:1;max-width:150px" value="' +
+                esc(BG.state.number || '') + '">' +
+              '<span class="number-suffix">번</span>' +
             '</span>' +
+            '<span class="hint">이름 대신 번호만 입력하면 돼요. 친구마다 다른 번호를 써 주세요.</span>' +
+            '<span class="hint">' + (validNumber(BG.state.number) ? '내 기록: ' + myRecordLine() : '번호를 넣으면 내 승수·포인트가 보여요.') + '</span>' +
           '</label>' +
           '<button class="btn btn-ghost" data-action="hg.rules">📖 게임 규칙 보기</button>' +
         '</div>' +
@@ -333,6 +398,16 @@
             '<p class="hint" style="margin-top:12px">' +
               (room.canStart ? '모두 준비되면 방장이 게임을 시작할 수 있어요.' : '최소 ' + room.minPlayers + '명이 필요합니다. 봇을 추가해 인원을 채울 수 있어요.') +
             '</p>' +
+          '</div>' +
+          '<div class="panel">' +
+            '<div class="panel-title">🎒 내 기록</div>' +
+            '<div class="row" style="align-items:center;gap:10px">' +
+              avatar({ number: BG.state.number, name: myLabel() }, 'sm') +
+              '<b>' + esc(myLabel()) + '</b>' +
+              '<span class="spacer"></span>' +
+              myRecordLine() +
+            '</div>' +
+            '<div class="lobby-rank" style="margin-top:12px">' + classRankingHtml(5, true) + '</div>' +
           '</div>' +
         '</div>' +
       '</div>'
@@ -485,6 +560,148 @@
     );
   }
 
+  /* ---------------- 우승 결과 팝업 · 컨페티 ---------------- */
+
+  function pointsForRankLocal(rank) {
+    if (rank === 1) return 100;
+    if (rank === 2) return 50;
+    if (rank === 3) return 30;
+    return 10;
+  }
+
+  function confettiHtml() {
+    const colors = ['#ff8fa3', '#ffd76e', '#8fd9ab', '#9cc4f2', '#c4acf0', '#ffb49b'];
+    let out = '<div class="confetti-layer" aria-hidden="true">';
+    for (let i = 0; i < 56; i++) {
+      const left = Math.round(Math.random() * 1000) / 10;
+      const delay = Math.round(Math.random() * 900) / 1000;
+      const dur = 1.6 + Math.round(Math.random() * 160) / 100;
+      const size = 7 + Math.round(Math.random() * 9);
+      const rotate = Math.round(Math.random() * 720 - 360);
+      out += '<span class="confetti-piece" style="left:' + left + '%;' +
+        'width:' + size + 'px;height:' + Math.round(size * 0.55) + 'px;' +
+        'background:' + colors[i % colors.length] + ';' +
+        'animation-delay:' + delay + 's;animation-duration:' + dur + 's;' +
+        '--spin:' + rotate + 'deg"></span>';
+    }
+    return out + '</div>';
+  }
+
+  function medalFor(rank) {
+    if (rank === 1) return '🏆';
+    if (rank === 2) return '🥈';
+    if (rank === 3) return '🥉';
+    return '<span class="rank-plain">' + rank + '</span>';
+  }
+
+  function resultModalHtml(game, opts) {
+    const ranking = game.ranking || [];
+    const useServerPoints = !!(S.lastResult && S.lastResult.code === opts.code);
+    const points = useServerPoints ? (S.lastResult.points || {}) : null;
+    const myNo = validNumber(BG.state.number);
+
+    const rows = ranking.map(function (row) {
+      let gain = '—';
+      if (!row.isBot && row.number !== null && row.number !== undefined) {
+        if (points && points[row.number] !== undefined) gain = '+' + points[row.number] + 'P';
+        else if (opts.mode === 'bot') gain = '연습';
+        else gain = '+' + pointsForRankLocal(row.rank) + 'P';
+      }
+      const isMe = myNo && row.number === myNo;
+      return '<tr class="' + (row.rank === 1 ? 'is-first ' : '') + (isMe ? 'is-me' : '') + '">' +
+        '<td class="res-rank">' + medalFor(row.rank) + '</td>' +
+        '<td class="res-who"><span class="res-avatar">' + avatar({ number: row.number, name: row.name }, 'xs') + '</span>' +
+          '<span class="res-name">' + esc(row.number !== null && row.number !== undefined ? row.number + '번' : row.name) +
+            (isMe ? ' <span class="tag you">나</span>' : '') + (row.isBot ? ' 🤖' : '') + '</span></td>' +
+        '<td class="res-cards">' + row.cards + '장' + (row.eliminated ? ' <span class="res-out">탈락</span>' : '') + '</td>' +
+        '<td class="res-bells"><span class="ok">✓' + row.bells.correct + '</span> <span class="no">✗' + row.bells.wrong + '</span></td>' +
+        '<td class="res-points">' + gain + '</td>' +
+        '</tr>';
+    }).join('');
+
+    const buttons = [];
+    if (opts.mode === 'bot') {
+      buttons.push('<button class="btn btn-primary btn-block" data-action="hg.botRestart">한 판 더</button>');
+      buttons.push('<button class="btn btn-block" data-action="hg.botExit">그만하기</button>');
+    } else if (opts.role === 'spectator') {
+      buttons.push('<button class="btn btn-primary btn-block" data-action="hg.resultWatchBack">모둠 목록으로</button>');
+      buttons.push('<button class="btn btn-ghost btn-block" data-action="hg.closeResult">닫고 계속 보기</button>');
+    } else {
+      if (opts.isHost) {
+        buttons.push('<button class="btn btn-primary btn-block" data-action="hg.resultRestart">한 판 더 (다시 시작)</button>');
+      }
+      buttons.push('<button class="btn btn-block" data-action="hg.resultLeave">방 나가기</button>');
+      buttons.push('<button class="btn btn-ghost btn-block" data-action="hg.closeResult">닫기</button>');
+    }
+
+    const winner = ranking.find(function (r) { return r.rank === 1; });
+    const myRow = myNo ? ranking.find(function (r) { return r.number === myNo; }) : null;
+    const myGain = myNo && points ? points[myNo] : null;
+    const myLine = myRow
+      ? '<p class="result-mine">내 순위 <b>' + myRow.rank + '등</b>' +
+        (myGain ? ' · <b>+' + myGain + 'P</b> 적립!' : '') +
+        (myRow.rank === 1 ? ' 🎉 우승!' : '') + '</p>'
+      : '';
+
+    return (
+      confettiHtml() +
+      '<div class="result-modal">' +
+        '<div class="result-hero">' +
+          '<div class="result-crown">🏆</div>' +
+          '<h2 class="result-title">' + esc(game.winner || (winner ? winner.name : '게임')) + ' 우승!</h2>' +
+          '<p class="result-sub">수고했어요! 최종 순위를 확인해 보세요.</p>' +
+          myLine +
+        '</div>' +
+        '<div class="result-table-wrap">' +
+          '<table class="result-table">' +
+            '<thead><tr><th>순위</th><th>참가자</th><th>남은 카드</th><th>종 성공/실수</th><th>포인트</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody>' +
+          '</table>' +
+        '</div>' +
+        '<p class="hint" style="text-align:center">순위 포인트: 1등 +100P · 2등 +50P · 3등 +30P · 그 외 +10P<br>' +
+          '우리 반 누적 랭킹은 교사 관전 화면에서 볼 수 있어요.</p>' +
+        '<div class="stack" style="margin-top:14px">' + buttons.join('') + '</div>' +
+      '</div>'
+    );
+  }
+
+  /** 게임이 끝나면 한 번만 결과 팝업과 축하 소리를 보여 줍니다. */
+  function maybeShowResult(game, opts) {
+    if (!game || game.status !== 'finished') return;
+    const key = (opts.code || opts.mode || 'game') + ':' + (game.startedAt || '') + ':' + game.players.length;
+    if (S.resultShown[key]) return;
+    S.resultShown[key] = true;
+    if (BG.sound) BG.sound.celebration();
+    BG.ui.modal(resultModalHtml(game, opts));
+    // 컨페티는 모달 밖(화면 전체)에 뿌려 스크롤·클리핑에 영향받지 않게 합니다.
+    const layer = document.querySelector('.confetti-layer');
+    if (layer) {
+      document.body.appendChild(layer);
+      setTimeout(function () {
+        if (layer.parentNode) layer.parentNode.removeChild(layer);
+      }, 4200);
+    }
+  }
+
+  BG.actions['hg.closeResult'] = function () {
+    BG.ui.closeModal();
+  };
+
+  BG.actions['hg.resultRestart'] = function () {
+    BG.ui.closeModal();
+    BG.net.send({ t: 'start' });
+  };
+
+  BG.actions['hg.resultLeave'] = function () {
+    BG.ui.closeModal();
+    doLeave();
+  };
+
+  BG.actions['hg.resultWatchBack'] = function () {
+    BG.ui.closeModal();
+    BG.actions['hg.watchBack']();
+  };
+
   function boardScreen(view) {
     const game = view.game;
     const players = game.players.slice().sort(function (a, b) { return a.seat - b.seat; });
@@ -500,8 +717,8 @@
     const myBar = view.role === 'spectator'
       ? '<div class="spectator-note">👀 관전 중입니다 — 카드나 종을 누를 수 없어요.</div>'
       : '<div class="my-bar">' +
-          '<div class="my-who">' + avatar(me || { name: BG.state.nickname }, 'sm') +
-            '<div><div class="my-name">' + esc(me ? me.name : BG.state.nickname) + '</div>' +
+          '<div class="my-who">' + avatar(me || { number: BG.state.number, name: myLabel() }, 'sm') +
+            '<div><div class="my-name">' + esc(me ? me.name : myLabel()) + '</div>' +
             '<div class="my-info">내 카드 <b>' + (me ? me.totalCards : 0) + '</b>장 · 테이블 <b>' + game.tableCount + '</b>장 · ' +
               '종 <b>' + game.bells.correct + '</b>번 성공 / <b>' + game.bells.wrong + '</b>번 실수</div></div>' +
           '</div>' +
@@ -585,21 +802,21 @@
         if (seat && seat.code === code && seat.token) {
           if (!S.resumeSent[code]) {
             S.resumeSent[code] = true;
-            BG.net.send({ t: 'resume', gameId: 'halligalli', code: code, token: seat.token });
+            BG.net.send({ t: 'resume', gameId: 'halligalli', code: code, classCode: BG.state.classCode, token: seat.token });
           }
         } else if (!S.pendingJoin || S.pendingJoin !== code) {
-          const nick = BG.state.nickname;
-          if (nick) {
+          const number = validNumber(readNumber());
+          if (number) {
             S.pendingJoin = code;
-            BG.net.send({ t: 'join', gameId: 'halligalli', code: code, nickname: nick });
+            BG.net.send({ t: 'join', gameId: 'halligalli', code: code, classCode: BG.state.classCode, number: number });
           }
         }
       }
       BG.ui.screen(
         '<div class="center-block">' +
-          (BG.state.nickname || getSeat()
+          (validNumber(readNumber()) || getSeat()
             ? '<span class="spinner"></span><div>방에 입장하는 중…</div>'
-            : '<div>닉네임이 필요합니다. <a href="#/halligalli">모둠 선택으로 돌아가기</a></div>') +
+            : '<div>출석번호가 필요합니다. <a href="#/halligalli">모둠 선택으로 돌아가기</a></div>') +
         '</div>',
         'hg.room'
       );
@@ -608,11 +825,12 @@
 
     const room = S.room;
     if (room.status === 'waiting') {
+      closeResultModalIfOpen();
       BG.ui.screen(lobbyHtml(room), 'hg.room');
       return;
     }
 
-    BG.ui.screen(boardScreen({
+    const view = {
       title: room.name,
       code: room.code,
       game: room.game,
@@ -620,7 +838,13 @@
       role: room.role,
       mode: 'multi',
       isHost: room.youAreHost
-    }), 'hg.room');
+    };
+    BG.ui.screen(boardScreen(view), 'hg.room');
+    maybeShowResult(room.game, view);
+  }
+
+  function closeResultModalIfOpen() {
+    if (document.querySelector('.result-modal')) BG.ui.closeModal();
   }
 
   function renderWatch(params) {
@@ -629,13 +853,14 @@
     if (!S.room || S.room.code !== code || S.room.role !== 'spectator') {
       if (BG.net.connected && !S.spectateSent[code]) {
         S.spectateSent[code] = true;
-        BG.net.send({ t: 'spectate', gameId: 'halligalli', code: code });
+        BG.net.send({ t: 'spectate', gameId: 'halligalli', code: code, classCode: BG.state.classCode });
       }
       BG.ui.screen('<div class="center-block"><span class="spinner"></span><div>관전 화면을 준비하는 중…</div></div>', 'hg.watch');
       return;
     }
     const room = S.room;
     if (!room.game) {
+      closeResultModalIfOpen();
       BG.ui.screen(
         '<div class="screen-head">' +
           '<div>' +
@@ -654,7 +879,7 @@
       );
       return;
     }
-    BG.ui.screen(boardScreen({
+    const view = {
       title: room.name + ' 관전',
       code: room.code,
       game: room.game,
@@ -662,7 +887,9 @@
       role: 'spectator',
       mode: 'multi',
       isHost: false
-    }), 'hg.watch');
+    };
+    BG.ui.screen(boardScreen(view), 'hg.watch');
+    maybeShowResult(room.game, view);
   }
 
   /* ---------------- 교사 관전 ---------------- */
@@ -713,8 +940,39 @@
     );
   }
 
+  /** 교사 확인(PIN) 화면 — 우리 반 선생님만 관전·방 초기화를 할 수 있습니다. */
+  function teacherGateHtml() {
+    return (
+      '<div class="teacher-gate">' +
+        '<div class="gate-emoji">👩‍🏫</div>' +
+        '<h1 class="page-title">' + esc(BG.className() || BG.state.classCode) + ' 선생님 확인</h1>' +
+        '<p class="page-sub">우리 반을 만들 때 정한 <b>교사 비밀번호(PIN)</b>를 입력하면<br>' +
+          '우리 반 6개 모둠의 진행 상황을 보고 방을 초기화할 수 있어요.</p>' +
+        '<div class="gate-form">' +
+          '<input id="teacher-pin" class="input pin-input" type="password" inputmode="numeric" maxlength="8" ' +
+            'autocomplete="current-password" placeholder="교사 PIN">' +
+          '<button class="btn btn-primary" data-action="hg.teacherAuth">확인</button>' +
+        '</div>' +
+        '<a class="back-link" href="#/class/' + esc(BG.state.classCode) + '">← 우리 반으로</a>' +
+      '</div>'
+    );
+  }
+
+  function teacherReady() {
+    return !!BG.teacherToken(BG.state.classCode);
+  }
+
   function renderTeacher() {
     BG.net.connect();
+
+    if (!BG.state.classCode) {
+      BG.navigate('/');
+      return;
+    }
+    if (!teacherReady()) {
+      BG.ui.screen(teacherGateHtml(), 'hg.teacher');
+      return;
+    }
 
     const rooms = S.rooms.filter(function (r) { return r.gameId === 'halligalli'; });
     const playing = rooms.filter(function (r) { return r.status === 'playing'; }).length;
@@ -723,9 +981,9 @@
     BG.ui.screen(
       '<div class="screen-head">' +
         '<div>' +
-          '<a class="back-link" href="#/halligalli">← 할리갈리 입장</a>' +
+          '<a class="back-link" href="#/class/' + esc(BG.state.classCode) + '">← ' + esc(BG.className() || '우리 반') + '</a>' +
           '<h1 class="page-title">👩‍🏫 교사 관전 모드</h1>' +
-          '<p class="page-sub">6개 모둠 방의 상황을 실시간으로 확인하고, 원하는 모둠을 눌러 관전할 수 있습니다.</p>' +
+          '<p class="page-sub">' + esc(BG.className() || BG.state.classCode) + ' 우리 반 6개 모둠의 상황을 실시간으로 확인하고, 원하는 모둠을 눌러 관전할 수 있습니다.</p>' +
         '</div>' +
         '<div class="row">' +
           '<span class="badge ' + (playing ? 'playing' : 'ready') + '">' + playing + '개 모둠 진행 중</span>' +
@@ -736,6 +994,7 @@
       '<div class="teacher-grid">' +
         (rooms.length ? rooms.map(teacherRoomCard).join('') : '<div class="empty">모둠 방 정보를 불러오는 중입니다…</div>') +
       '</div>' +
+      '<div style="margin-top:18px">' + classRankingHtml(10) + '</div>' +
       '<div class="panel" style="margin-top:18px">' +
         '<div class="panel-title">💡 수업 운영 팁</div>' +
         '<p class="hint">' +
@@ -778,8 +1037,9 @@
 
   function startBotGame(count, level) {
     stopBotLoop();
-    const name = (BG.state.nickname || '플레이어').slice(0, 12);
-    const players = [{ id: 'me', name: name || '플레이어', isBot: false }];
+    const number = validNumber(BG.state.number) || 1;
+    const name = numberLabel(number);
+    const players = [{ id: 'me', name: name, number: number, isBot: false }];
     const names = HG.BOT_NAMES.slice();
     for (let i = 1; i < count; i++) {
       players.push({ id: 'bot' + i, name: names[i - 1] || ('봇' + i), isBot: true });
@@ -811,7 +1071,7 @@
           '<div>' +
             '<a class="back-link" href="#/halligalli">← 할리갈리 입장</a>' +
             '<h1 class="page-title">🤖 AI 봇과 연습</h1>' +
-            '<p class="page-sub">서버에 접속하지 않아도 혼자서 4~5인 게임을 바로 테스트할 수 있습니다.</p>' +
+            '<p class="page-sub">서버에 접속하지 않아도 혼자서 4~5인 게임을 바로 테스트할 수 있습니다. (내 번호: ' + esc(myLabel()) + ')</p>' +
           '</div>' +
           '<button class="btn btn-sm" data-action="hg.rules">📖 규칙</button>' +
         '</div>' +
@@ -843,7 +1103,7 @@
     }
 
     const game = S.bot.game.stateFor('me');
-    BG.ui.screen(boardScreen({
+    const view = {
       title: 'AI 봇 연습',
       code: '연습',
       game: game,
@@ -851,7 +1111,9 @@
       role: 'player',
       mode: 'bot',
       isHost: true
-    }), 'hg.bot');
+    };
+    BG.ui.screen(boardScreen(view), 'hg.bot');
+    maybeShowResult(game, view);
   }
 
   /* ---------------- 동작 ---------------- */
@@ -864,10 +1126,10 @@
   }
 
   function joinCode(code) {
-    const nick = readNickname();
-    if (!nick) {
-      BG.ui.toast('닉네임을 먼저 입력해 주세요.', 'error');
-      const input = document.getElementById('nickname');
+    const number = validNumber(readNumber());
+    if (!number) {
+      BG.ui.toast('출석번호를 1~99 사이 숫자로 입력해 주세요.', 'error');
+      const input = document.getElementById('number');
       if (input) input.focus();
       return;
     }
@@ -882,7 +1144,7 @@
     }
     S.pendingJoin = code;
     S.resumeSent[code] = false;
-    BG.net.send({ t: 'join', gameId: 'halligalli', code: code, nickname: nick });
+    BG.net.send({ t: 'join', gameId: 'halligalli', code: code, classCode: BG.state.classCode, number: number });
     BG.navigate('/halligalli/room/' + code);
   }
 
@@ -932,17 +1194,37 @@
   };
 
   BG.actions['hg.createRoom'] = function () {
-    const nick = readNickname();
-    if (!nick) {
-      BG.ui.toast('닉네임을 먼저 입력해 주세요.', 'error');
+    const number = validNumber(readNumber());
+    if (!number) {
+      BG.ui.toast('출석번호를 먼저 입력해 주세요.', 'error');
       return;
     }
     if (!ensureConnected()) return;
-    BG.net.send({ t: 'create', gameId: 'halligalli', nickname: nick });
+    BG.net.send({ t: 'create', gameId: 'halligalli', classCode: BG.state.classCode, number: number });
   };
 
   BG.actions['hg.teacher'] = function () {
     BG.navigate('/halligalli/teacher');
+  };
+
+  /** 교사 PIN 확인 → 성공하면 교사 기능(관전·방 초기화)이 열립니다. */
+  BG.actions['hg.teacherAuth'] = function () {
+    const el = document.getElementById('teacher-pin');
+    const pin = el ? String(el.value || '').replace(/[^0-9]/g, '') : '';
+    if (!pin) {
+      BG.ui.toast('교사 비밀번호를 입력해 주세요.', 'error');
+      if (el) el.focus();
+      return;
+    }
+    if (!ensureConnected()) return;
+    S.teacherBound = false;
+    BG.net.send({ t: 'classAuth', code: BG.state.classCode, pin: pin });
+  };
+
+  BG.actions['hg.teacherExit'] = function () {
+    BG.setTeacherToken(BG.state.classCode, '');
+    S.teacherBound = false;
+    BG.navigate('/class/' + BG.state.classCode);
   };
 
   BG.actions['hg.bot'] = function () {
@@ -954,10 +1236,12 @@
   };
 
   BG.actions['hg.botRestart'] = function () {
+    closeResultModalIfOpen();
     startBotGame(S.bot.count || 4, S.bot.level || 'normal');
   };
 
   BG.actions['hg.botExit'] = function () {
+    closeResultModalIfOpen();
     stopBotLoop();
     S.bot = { active: false, game: null, driver: null, timer: null, level: S.bot.level || 'normal', count: S.bot.count || 4 };
     BG.navigate('/halligalli');
@@ -1082,7 +1366,7 @@
     const code = S.pendingResetCode;
     S.pendingResetCode = null;
     BG.ui.closeModal();
-    if (code) BG.net.send({ t: 'resetRoom', gameId: 'halligalli', code: code });
+    if (code) BG.net.send({ t: 'resetRoom', gameId: 'halligalli', code: code, classCode: BG.state.classCode });
   };
 
   BG.actions['hg.watch'] = function (el) {
@@ -1117,9 +1401,9 @@
 
   document.addEventListener('input', function (event) {
     const el = event.target;
-    if (!el || el.id !== 'nickname') return;
+    if (!el || el.id !== 'number') return;
     const preview = document.getElementById('my-avatar-preview');
-    if (preview) preview.innerHTML = avatar(el.value.trim() || '나', 'sm');
+    if (preview) preview.innerHTML = avatar({ number: el.value.replace(/[^0-9]/g, ''), name: '나' }, 'sm');
   });
 
   // 첫 터치/클릭에서 브라우저의 소리 재생 권한을 확보합니다.
@@ -1155,7 +1439,37 @@
     const screen = screenName();
     if (screen === 'halligalli') renderEntry();
     else if (screen === 'hg.teacher') renderTeacher();
+    else if (screen === 'hg.room' && S.room && S.room.status === 'waiting') {
+      BG.ui.screen(lobbyHtml(S.room), 'hg.room');
+    }
   }
+
+  /* 우리 반 누적 기록(승수·포인트) — 서버 집계 */
+  BG.net.on('class_stats', function (msg) {
+    if (!msg || msg.classCode !== BG.state.classCode) return;
+    S.stats = msg.stats || [];
+    refreshRoomList();
+    if (screenName() === 'class' && BG.portal) BG.portal.classPortalHtml();
+  });
+
+  BG.net.on('game_result', function (msg) {
+    if (!msg || msg.classCode !== BG.state.classCode) return;
+    S.stats = msg.stats || S.stats;
+    S.lastResult = msg;
+    if (S.lastResultAt !== msg.recordedAt && BG.markResultSeen(msg.classCode + ':' + msg.recordedAt)) {
+      S.lastResultAt = msg.recordedAt;
+      const myNo = validNumber(BG.state.number);
+      if (myNo && msg.points && msg.points[myNo] !== undefined) {
+        const row = (msg.ranking || []).find(function (r) { return r.number === myNo; });
+        BG.addRecord(BG.state.classCode, myNo, {
+          wins: row && row.rank === 1 ? 1 : 0,
+          points: msg.points[myNo]
+        });
+      }
+    }
+    refreshRoomList();
+    if (screenName() === 'class' && BG.portal) BG.portal.classPortalHtml();
+  });
 
   BG.net.on('welcome', function (msg) {
     S.rooms = (msg.rooms || []).filter(function (r) { return r.gameId === 'halligalli'; });
@@ -1192,6 +1506,22 @@
     BG.ui.toast(msg.name + ' 관전을 시작합니다.', 'ok');
   });
 
+  /* 교사 PIN 인증 성공 → 교사 토큰을 이 탭에만 저장 */
+  BG.net.on('class_auth_ok', function (msg) {
+    if (!msg || !msg['class']) return;
+    const cls = msg['class'];
+    BG.setClass(cls.code, cls.name);
+    if (msg.teacherToken) BG.setTeacherToken(cls.code, msg.teacherToken);
+    S.teacherBound = true;
+    BG.ui.toast(cls.name + ' 선생님 확인 완료!', 'ok');
+    if (screenName() === 'hg.teacher') renderTeacher();
+    else if (screenName() === 'class' && BG.portal) BG.portal.classPortalHtml();
+    else if (screenName() === 'hg.watch') {
+      S.spectateSent = {};
+      BG.render();
+    }
+  });
+
   BG.net.on('room_reset', function (msg) {
     BG.ui.toast(msg.message || '방이 초기화되었습니다.', 'ok');
     const seat = getSeat();
@@ -1216,7 +1546,18 @@
   BG.net.on('error', function (msg) {
     BG.ui.toast(msg.message || '요청을 처리할 수 없습니다.', 'error');
     const code = msg.code;
-    if (['no_seat', 'no_room', 'no_name', 'full', 'playing', 'dup_name', 'already_in_room'].indexOf(code) !== -1) {
+    if (code === 'teacher_auth_required') {
+      BG.setTeacherToken(BG.state.classCode, '');
+      S.teacherBound = false;
+      S.spectateSent = {};
+      if (screenName() === 'hg.watch') {
+        S.room = null;
+        BG.navigate('/halligalli/teacher');
+      }
+      return;
+    }
+    if (code === 'bad_pin' && screenName() === 'hg.teacher') return;
+    if (['no_seat', 'no_room', 'no_name', 'full', 'playing', 'dup_name', 'dup_number', 'bad_number', 'already_in_room'].indexOf(code) !== -1) {
       clearSeat();
       S.pendingJoin = null;
       S.room = null;
@@ -1230,11 +1571,21 @@
     S.pendingJoin = null;
   });
 
+  BG.net.on('close', function () {
+    S.teacherBound = false;
+  });
+
   BG.net.on('open', function () {
     const path = BG.currentPath();
+    S.teacherBound = false;
     if (path.indexOf('/halligalli') !== 0) return;
     if (path === '/halligalli/teacher' && BG.net.connected) {
-      BG.net.send({ t: 'overview', gameId: 'halligalli' });
+      if (teacherReady()) {
+        BG.net.send({ t: 'classAuth', code: BG.state.classCode, token: BG.teacherToken(BG.state.classCode) });
+      }
+    }
+    if (path.indexOf('/halligalli/watch/') === 0 && teacherReady()) {
+      BG.net.send({ t: 'classAuth', code: BG.state.classCode, token: BG.teacherToken(BG.state.classCode) });
     }
     const seat = getSeat();
     if (seat && path.indexOf('/halligalli/room/') === 0) {
@@ -1242,7 +1593,7 @@
       const code = path.split('/').pop().toUpperCase();
       if (seat.code === code) {
         S.resumeSent[code] = true;
-        BG.net.send({ t: 'resume', gameId: 'halligalli', code: seat.code, token: seat.token });
+        BG.net.send({ t: 'resume', gameId: 'halligalli', code: seat.code, classCode: BG.state.classCode, token: seat.token });
       }
     }
     BG.render();
@@ -1264,7 +1615,21 @@
 
   BG.router.add(/^\/halligalli\/teacher$/, 'hg.teacher', function () {
     BG.net.connect();
-    if (BG.net.connected) BG.net.send({ t: 'overview', gameId: 'halligalli' });
+    if (!BG.state.classCode) {
+      BG.navigate('/');
+      return;
+    }
+    if (!teacherReady()) {
+      BG.ui.screen(teacherGateHtml(), 'hg.teacher');
+      return;
+    }
+    if (BG.net.connected) {
+      if (!S.teacherBound) {
+        BG.net.send({ t: 'classAuth', code: BG.state.classCode, token: BG.teacherToken(BG.state.classCode) });
+      } else {
+        BG.net.send({ t: 'overview', gameId: 'halligalli', classCode: BG.state.classCode });
+      }
+    }
     renderTeacher();
   });
 
@@ -1278,6 +1643,9 @@
     renderTeacher: renderTeacher,
     renderBot: renderBot,
     rulesHtml: rulesHtml,
+    classRankingHtml: classRankingHtml,
+    myRecordLine: myRecordLine,
+    resultModalHtml: resultModalHtml,
     state: S
   };
 })();

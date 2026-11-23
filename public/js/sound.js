@@ -93,6 +93,52 @@
       });
     },
 
+    /** 박수 소리 — Web Audio로 만든 짧은 잡음 타격(박수) 여러 개 */
+    applause(duration) {
+      if (!sound.enabled) return;
+      const audio = sound.unlock();
+      if (!audio) return;
+      const total = duration || 2.1;
+      const rate = audio.sampleRate;
+      const buffer = audio.createBuffer(1, Math.floor(rate * total), rate);
+      const data = buffer.getChannelData(0);
+      const clapEvery = 0.075;
+      for (let i = 0; i < data.length; i++) {
+        const t = i / rate;
+        const slot = Math.floor(t / clapEvery);
+        const local = t - slot * clapEvery;
+        const seed = Math.sin(slot * 12.9898) * 43758.5453;
+        const jitter = (seed - Math.floor(seed)) * 0.9 + 0.3;
+        const env = Math.exp(-local * 65) * Math.min(1, t * 6) * Math.exp(-t * 0.9) * jitter * 0.5;
+        data[i] = ((Math.random() * 2 - 1) * 0.9 + Math.sin(t * 180 * Math.PI) * 0.12) * env;
+      }
+      const src = audio.createBufferSource();
+      src.buffer = buffer;
+      const filter = audio.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1500;
+      filter.Q.value = 0.6;
+      const gain = audio.createGain();
+      gain.gain.value = 0.5;
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(audio.destination);
+      src.start();
+    },
+
+    /** 우승 축하: 팡파레 + 박수 */
+    celebration() {
+      if (!sound.enabled) return;
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach(function (freq, i) {
+        sound.tone(freq, { type: 'triangle', duration: 0.42, gain: 0.15, delay: i * 0.12 });
+      });
+      [523.25, 659.25, 783.99, 1046.5].forEach(function (freq) {
+        sound.tone(freq, { type: 'sine', duration: 0.9, gain: 0.09, delay: 0.52 });
+      });
+      sound.applause(2.2);
+    },
+
     flip() {
       sound.tone(520, { type: 'triangle', duration: 0.09, gain: 0.05, slideTo: 760 });
     },

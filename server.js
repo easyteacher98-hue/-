@@ -1,5 +1,5 @@
 /*
- * 모둠 보드게임 허브 – HTTP 정적 서버 + WebSocket 방 서버
+ * 보드게임천국 허브 – HTTP 정적 서버 + WebSocket 반/방 서버
  *
  * - 게임 로직은 src/games/<game>.js 모듈이 담당하고, 이 파일은 방/좌석/관전/전송만 처리합니다.
  * - 그래서 새 게임을 추가해도 이 서버 코드는 거의 고치지 않습니다.
@@ -30,6 +30,12 @@ const MIME = {
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+/* 반(교실) 코드는 헷갈리는 글자(0/O, 1/I)를 뺀 4~8자입니다. */
+const CLASS_CODE_LENGTH = 5;
+const DEFAULT_CLASS_CODE = 'DEMO';
+const DEFAULT_CLASS_NAME = '연습 교실';
+const CLASS_STORE_VERSION = 1;
+
 function sanitizeNickname(raw) {
   const text = String(raw === undefined || raw === null ? '' : raw)
     .replace(/[\u0000-\u001f\u007f]/g, '')
@@ -38,29 +44,305 @@ function sanitizeNickname(raw) {
   return text.slice(0, 12);
 }
 
+function sanitizeClassCode(raw) {
+  return String(raw === undefined || raw === null ? '' : raw)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 8);
+}
+
+function sanitizeClassName(raw) {
+  return String(raw === undefined || raw === null ? '' : raw)
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 20);
+}
+
+/** 교사 PIN: 숫자 4~8자리 */
+function sanitizePin(raw) {
+  const text = String(raw === undefined || raw === null ? '' : raw).replace(/[^0-9]/g, '');
+  return text.length >= 4 && text.length <= 8 ? text : '';
+}
+
+/** 출석번호: 숫자만, 1~99 */
+function sanitizeNumber(raw) {
+  const text = String(raw === undefined || raw === null ? '' : raw).trim();
+  if (!/^[0-9]{1,2}$/.test(text)) return null;
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < 1 || n > 99) return null;
+  return n;
+}
+
+function numberName(n) {
+  return n + '번';
+}
+
+function randomClassCode() {
+  let code = '';
+  const bytes = crypto.randomBytes(CLASS_CODE_LENGTH);
+  for (let i = 0; i < CLASS_CODE_LENGTH; i++) code += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  return code;
+}
+
+function hashPin(pin, salt) {
+  return crypto.scryptSync(pin, salt, 32).toString('hex');
+}
+
+function safeEqualHex(a, b) {
+  const ba = Buffer.from(String(a || ''), 'hex');
+  const bb = Buffer.from(String(b || ''), 'hex');
+  if (!ba.length || ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
 function createHub(options) {
+  const opts = options || {};
   const settings = {
-    groupCapacity: Number((options && options.groupCapacity) || process.env.GROUP_CAPACITY || 4),
+    groupCapacity: Number(opts.groupCapacity || process.env.GROUP_CAPACITY || 4),
     maxBots: 4,
-    overviewInterval: 150
+    overviewInterval: 150,
+    // 반 목록을 파일에 남겨 서버가 다시 켜져도 우리 반 링크가 살아 있게 합니다.
+    storePath: opts.store === false
+      ? null
+      : (opts.storePath || process.env.CLASS_STORE || path.join(__dirname, 'data', 'classes.json'))
   };
 
-  const rooms = new Map();       // `${gameId}:${code}` -> room
-  const connections = new Set(); // 모든 ws
+  const rooms = new Map();        // `${classCode}|${gameId}:${code}` -> room
+  const classes = new Map();      // 반 코드 -> { code, name, pinHash, pinSalt, createdAt }
+  const classTokens = new Map();  // 반 코드 -> Set(교사 토큰)
+  const classScores = new Map();  // 반 코드 -> Map(번호 -> { number, plays, wins, points })
+  const connections = new Set();  // 모든 ws
   const overviewSubs = new Set(); // 교사 관전(요약 구독)
   let overviewTimer = null;
   let seq = 0;
   const nextId = function () { return ++seq; };
 
+  /* ---------------- 반(교실) ---------------- */
+
+  function makeClass(spec) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    return {
+      code: spec.code,
+      name: spec.name,
+      pinned: !!spec.pinned,
+      pinSalt: spec.pinSalt || salt,
+      pinHash: spec.pinHash || hashPin(spec.pin, spec.pinSalt || salt),
+      createdAt: spec.createdAt || Date.now()
+    };
+  }
+
+  function classInfo(cls) {
+    return {
+      code: cls.code,
+      name: cls.name,
+      linkPath: classLinkPath(cls.code),
+      createdAt: cls.createdAt
+    };
+  }
+
+  function classLinkPath(code) {
+    return '/?class=' + code;
+  }
+
+  function getClass(code) {
+    const key = sanitizeClassCode(code);
+    if (!key) return null;
+    return classes.get(key) || null;
+  }
+
+  /** 반 코드에 쓸 수 있는지 (없으면 새로 만들 수 있음) */
+  function classCodeTaken(code) {
+    return classes.has(code);
+  }
+
+  function newTeacherToken(cls) {
+    const token = crypto.randomBytes(18).toString('hex');
+    if (!classTokens.has(cls.code)) classTokens.set(cls.code, new Set());
+    const set = classTokens.get(cls.code);
+    set.add(token);
+    // 최근 토큰 30개만 남깁니다. (오래된 탭은 다시 PIN을 넣으면 됩니다)
+    while (set.size > 30) set.delete(set.values().next().value);
+    return token;
+  }
+
+  function isTeacherToken(cls, token) {
+    const set = classTokens.get(cls.code);
+    return !!(set && token && set.has(String(token)));
+  }
+
+  /** 기본 '연습 교실'은 PIN 없이 열려 있습니다. (직접 주소로 들어오는 혼자 연습용) */
+  function canTeach(ws, classCode) {
+    const code = sanitizeClassCode(classCode) || DEFAULT_CLASS_CODE;
+    if (code === DEFAULT_CLASS_CODE) return true;
+    return !!(ws.meta.teacher && ws.meta.classCode === code);
+  }
+
+  /* ---------------- 우리 반 누적 기록 (승수 · 포인트) ----------------
+   * 서버가 다시 켜지면 초기화됩니다. (학생 브라우저에도 내 기록을 따로 저장해 둡니다)
+   * 봇은 집계하지 않고, 출석번호(number)가 있는 사람만 쌓입니다.
+   */
+
+  const POINTS_BY_RANK = { 1: 100, 2: 50, 3: 30 };
+  const POINTS_OTHER = 10;
+
+  function pointsForRank(rank) {
+    return POINTS_BY_RANK[rank] || POINTS_OTHER;
+  }
+
+  function scoreMap(classCode) {
+    const code = sanitizeClassCode(classCode) || DEFAULT_CLASS_CODE;
+    let map = classScores.get(code);
+    if (!map) {
+      map = new Map();
+      classScores.set(code, map);
+    }
+    return map;
+  }
+
+  function classScoreList(classCode) {
+    const out = [];
+    for (const rec of scoreMap(classCode).values()) out.push(Object.assign({}, rec));
+    out.sort(function (a, b) {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      return a.number - b.number;
+    });
+    return out.map(function (rec, i) { return Object.assign({ rank: i + 1 }, rec); });
+  }
+
+  /** 한 판이 끝났을 때 순위대로 승수·포인트를 적립하고 결과 메시지를 돌려줍니다. */
+  function recordGameResult(room) {
+    const game = room.game;
+    if (!game || game.status !== 'finished' || room.resultRecorded) return null;
+    if (game.finishReason === 'closed_by_host') {
+      room.resultRecorded = true;
+      return null;
+    }
+    room.resultRecorded = true;
+
+    const ranking = game.ranking();
+    const map = scoreMap(room.classCode);
+    const points = {};
+    const won = [];
+
+    ranking.forEach(function (row) {
+      if (row.isBot || row.number === null || row.number === undefined) return;
+      const gain = pointsForRank(row.rank);
+      let rec = map.get(row.number);
+      if (!rec) rec = { number: row.number, plays: 0, wins: 0, points: 0 };
+      rec.plays += 1;
+      rec.points += gain;
+      if (row.rank === 1) {
+        rec.wins += 1;
+        won.push(row.number);
+      }
+      map.set(row.number, rec);
+      points[row.number] = gain;
+    });
+
+    return {
+      t: 'game_result',
+      classCode: room.classCode,
+      gameId: room.gameId,
+      code: room.code,
+      roomName: room.name,
+      ranking: ranking,
+      points: points,
+      winners: won,
+      stats: classScoreList(room.classCode),
+      recordedAt: Date.now()
+    };
+  }
+
+  function sendClassResult(room, payload) {
+    if (!payload) return;
+    for (const seat of room.seats) {
+      if (seat.ws) send(seat.ws, payload);
+    }
+    for (const ws of room.spectators) send(ws, payload);
+    // 같은 반의 다른 화면(교사 관전 대시보드·포털)에도 새 랭킹을 알립니다.
+    for (const ws of connections) {
+      if (ws.meta.classCode !== room.classCode) continue;
+      if (ws.meta.room === room) continue;
+      send(ws, payload);
+    }
+  }
+
+  function classStoreLoad() {
+    if (!settings.storePath) return;
+    let raw;
+    try {
+      raw = fs.readFileSync(settings.storePath, 'utf8');
+    } catch (err) {
+      return;
+    }
+    try {
+      const data = JSON.parse(raw);
+      for (const item of (data && data.classes) || []) {
+        const code = sanitizeClassCode(item.code);
+        if (!code || code === DEFAULT_CLASS_CODE) continue;
+        if (!item.pinHash || !item.pinSalt) continue;
+        classes.set(code, makeClass({
+          code: code,
+          name: sanitizeClassName(item.name) || code + ' 반',
+          pinned: true,
+          pinSalt: String(item.pinSalt),
+          pinHash: String(item.pinHash),
+          createdAt: Number(item.createdAt) || Date.now()
+        }));
+      }
+    } catch (err) {
+      console.error('[hub] 반 목록 파일을 읽지 못했습니다:', err.message);
+    }
+  }
+
+  function classStoreSave() {
+    if (!settings.storePath) return;
+    const list = [];
+    for (const cls of classes.values()) {
+      if (cls.code === DEFAULT_CLASS_CODE) continue;
+      list.push({
+        code: cls.code,
+        name: cls.name,
+        pinSalt: cls.pinSalt,
+        pinHash: cls.pinHash,
+        createdAt: cls.createdAt
+      });
+    }
+    const dir = path.dirname(settings.storePath);
+    const tmp = settings.storePath + '.' + process.pid + '.tmp';
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(tmp, JSON.stringify({ version: CLASS_STORE_VERSION, classes: list }, null, 2), { mode: 0o600 });
+      fs.renameSync(tmp, settings.storePath);
+    } catch (err) {
+      console.error('[hub] 반 목록을 저장하지 못했습니다:', err.message);
+      try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }
+    }
+  }
+
+  /** 반 하나에 1~6모둠 방을 만듭니다. 이미 있으면 그대로 둡니다. */
+  function initClassRooms(classCode) {
+    for (const gameModule of games.playable) {
+      for (const spec of gameModule.defaultRooms()) {
+        if (gameModule.id === 'halligalli') spec.capacity = settings.groupCapacity;
+        const room = newRoom(gameModule, Object.assign({ classCode: classCode }, spec));
+        if (!rooms.has(room.key)) rooms.set(room.key, room);
+      }
+    }
+  }
+
   /* ---------------- 방 ---------------- */
 
-  function roomKey(gameId, code) {
-    return gameId + ':' + String(code).toUpperCase();
+  function roomKey(gameId, code, classCode) {
+    return (sanitizeClassCode(classCode) || DEFAULT_CLASS_CODE) + '|' + gameId + ':' + String(code).toUpperCase();
   }
 
   function newRoom(gameModule, spec) {
     return {
-      key: roomKey(gameModule.id, spec.code),
+      key: roomKey(gameModule.id, spec.code, spec.classCode),
+      classCode: sanitizeClassCode(spec.classCode) || DEFAULT_CLASS_CODE,
       gameId: gameModule.id,
       gameModule: gameModule,
       code: String(spec.code).toUpperCase(),
@@ -75,6 +357,7 @@ function createHub(options) {
       endWhenTwo: false,
       botTimer: null,
       lastEvent: '대기 중',
+      resultRecorded: false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       finishedAt: null
@@ -82,33 +365,38 @@ function createHub(options) {
   }
 
   function initRooms() {
-    for (const gameModule of games.playable) {
-      for (const spec of gameModule.defaultRooms()) {
-        if (gameModule.id === 'halligalli') spec.capacity = settings.groupCapacity;
-        const room = newRoom(gameModule, spec);
-        rooms.set(room.key, room);
-      }
+    classes.set(DEFAULT_CLASS_CODE, makeClass({
+      code: DEFAULT_CLASS_CODE,
+      name: DEFAULT_CLASS_NAME,
+      pin: '0000',
+      pinned: false
+    }));
+    classStoreLoad();
+    initClassRooms(DEFAULT_CLASS_CODE);
+    for (const code of classes.keys()) {
+      if (code !== DEFAULT_CLASS_CODE) initClassRooms(code);
     }
   }
 
-  function getRoom(gameId, code) {
+  function getRoom(gameId, code, classCode) {
     if (!gameId || code === undefined || code === null) return null;
-    return rooms.get(roomKey(gameId, code)) || null;
+    return rooms.get(roomKey(gameId, code, classCode)) || null;
   }
 
-  function generateCode(gameId) {
+  function generateRoomCode(gameId, classCode) {
     for (let attempt = 0; attempt < 50; attempt++) {
       let code = '';
       const bytes = crypto.randomBytes(4);
       for (let i = 0; i < 4; i++) code += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
-      if (!getRoom(gameId, code)) return code;
+      if (!getRoom(gameId, code, classCode)) return code;
     }
     return 'R' + Date.now().toString(36).slice(-3).toUpperCase();
   }
 
-  function createCustomRoom(gameModule, hostName) {
-    const code = generateCode(gameModule.id);
+  function createCustomRoom(gameModule, hostName, classCode) {
+    const code = generateRoomCode(gameModule.id, classCode);
     const room = newRoom(gameModule, {
+      classCode: classCode,
       code: code,
       name: hostName + '의 방',
       isGroup: false,
@@ -149,6 +437,7 @@ function createHub(options) {
       if (result && result.ok) {
         const last = current.log[current.log.length - 1];
         touch(room, last ? last.text : null);
+        if (current.status !== 'playing') sendClassResult(room, recordGameResult(room));
         broadcastRoom(room);
       }
       if (current.status !== 'playing') stopBotLoop(room);
@@ -170,6 +459,7 @@ function createHub(options) {
     return {
       gameId: room.gameId,
       gameTitle: room.gameModule.title,
+      classCode: room.classCode,
       code: room.code,
       name: room.name,
       isGroup: room.isGroup,
@@ -185,6 +475,7 @@ function createHub(options) {
         return {
           id: s.id,
           name: s.name,
+          number: s.number === undefined ? null : s.number,
           ready: s.ready,
           isBot: s.isBot,
           connected: s.connected,
@@ -202,15 +493,18 @@ function createHub(options) {
     };
   }
 
-  function roomsOverview(gameId) {
+  function roomsOverview(gameId, classCode) {
     const out = [];
+    const onlyClass = sanitizeClassCode(classCode) || DEFAULT_CLASS_CODE;
     for (const room of rooms.values()) {
+      if (room.classCode !== onlyClass) continue;
       if (gameId && room.gameId !== gameId) continue;
       const summary = room.gameModule.summary(room.game);
       const humans = room.seats.filter(function (s) { return !s.isBot; });
       const bots = room.seats.filter(function (s) { return s.isBot; });
       out.push({
         gameId: room.gameId,
+        classCode: room.classCode,
         code: room.code,
         name: room.name,
         isGroup: room.isGroup,
@@ -225,6 +519,7 @@ function createHub(options) {
           return {
             id: s.id,
             name: s.name,
+            number: s.number === undefined ? null : s.number,
             ready: s.ready,
             isBot: s.isBot,
             connected: s.connected,
@@ -284,10 +579,11 @@ function createHub(options) {
   }
 
   function broadcastOverview() {
-    const list = roomsOverview();
+    // 연결마다 자기 반의 방만 보냅니다. (다른 반과 섞이지 않게)
     for (const ws of connections) {
       if (ws.meta.room && ws.meta.role === 'player') continue;
-      send(ws, { t: 'rooms', rooms: list });
+      const list = roomsOverview(null, ws.meta.classCode || DEFAULT_CLASS_CODE);
+      send(ws, { t: 'rooms', classCode: ws.meta.classCode || DEFAULT_CLASS_CODE, rooms: list });
     }
   }
 
@@ -324,6 +620,7 @@ function createHub(options) {
     room.game = null;
     room.endWhenTwo = false;
     room.finishedAt = null;
+    room.resultRecorded = false;
     room.seats = room.seats.filter(function (s) {
       if (opts.dropHumans) return !!opts.keepBots && s.isBot;
       if (s.isBot) return !!opts.keepBots;
@@ -370,11 +667,20 @@ function createHub(options) {
     }
     if (ws.meta.room) return sendError(ws, '이미 방에 있습니다.', 'already_in_room');
 
-    const room = getRoom(gameModule.id, msg.code);
+    const classCode = resolveClassFor(ws, msg.classCode);
+    if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
+
+    const room = getRoom(gameModule.id, msg.code, classCode);
     if (!room) return sendError(ws, '방을 찾을 수 없습니다. 모둠 번호를 확인해 주세요.', 'no_room');
 
-    const name = sanitizeNickname(msg.nickname);
-    if (!name) return sendError(ws, '닉네임을 입력해 주세요.', 'no_name');
+    // 번호(출석번호)로 입장합니다. (예전 닉네임 방식은 내부 테스트용으로만 허용)
+    const hasNumberField = msg.number !== undefined && msg.number !== null && String(msg.number).trim() !== '';
+    const number = hasNumberField ? sanitizeNumber(msg.number) : null;
+    if (hasNumberField && number === null) {
+      return sendError(ws, '번호는 1~99 사이 숫자로 입력해 주세요.', 'bad_number');
+    }
+    const name = number !== null ? numberName(number) : sanitizeNickname(msg.nickname);
+    if (!name) return sendError(ws, '출석번호를 입력해 주세요.', 'no_name');
 
     if (room.game && room.game.status === 'playing') {
       return sendError(ws, '이미 게임이 진행 중인 방입니다. 끝난 뒤에 입장해 주세요.', 'playing');
@@ -388,13 +694,17 @@ function createHub(options) {
     if (room.seats.length >= room.capacity) {
       return sendError(ws, '방이 가득 찼습니다. (' + room.capacity + '명)', 'full');
     }
-    if (room.seats.some(function (s) { return s.name === name; })) {
+    if (number !== null && room.seats.some(function (s) { return s.number === number; })) {
+      return sendError(ws, number + '번은 이미 이 방에 들어와 있습니다. 번호를 확인해 주세요.', 'dup_number');
+    }
+    if (number === null && room.seats.some(function (s) { return s.name === name; })) {
       return sendError(ws, '같은 닉네임이 이미 사용 중입니다. 다른 이름을 써 주세요.', 'dup_name');
     }
 
     const seat = {
       id: 'p' + nextId(),
       token: crypto.randomBytes(12).toString('hex'),
+      number: number,
       name: name,
       ready: false,
       isBot: false,
@@ -405,21 +715,37 @@ function createHub(options) {
     room.seats.push(seat);
     if (!room.hostId) room.hostId = seat.id;
     attachSeat(ws, room, seat);
-    send(ws, { t: 'joined', gameId: room.gameId, code: room.code, token: seat.token, playerId: seat.id });
+    send(ws, { t: 'joined', gameId: room.gameId, classCode: room.classCode, code: room.code, token: seat.token, playerId: seat.id, number: seat.number, name: seat.name });
     touch(room, name + '님이 ' + room.name + '에 입장했습니다.');
     broadcastRoom(room);
     broadcastOverview();
   }
 
+  /** 연결이 들어온 반을 정합니다. (연결에 묶인 반이 있으면 그것만 허용) */
+  function resolveClassFor(ws, requested) {
+    const wanted = sanitizeClassCode(requested);
+    const bound = ws.meta.classCode;
+    if (bound) {
+      if (wanted && wanted !== bound) return null;
+      return bound;
+    }
+    if (!wanted) return DEFAULT_CLASS_CODE;
+    const cls = classes.get(wanted);
+    if (!cls) return null;
+    ws.meta.classCode = wanted;
+    return wanted;
+  }
+
   function resumeSeat(ws, msg) {
     const gameModule = games.get(msg.gameId);
     if (!gameModule) return sendError(ws, '플레이할 수 없는 게임입니다.', 'bad_game');
-    const room = getRoom(gameModule.id, msg.code);
+    const classCode = resolveClassFor(ws, msg.classCode) || DEFAULT_CLASS_CODE;
+    const room = getRoom(gameModule.id, msg.code, classCode);
     if (!room) return sendError(ws, '이전 방을 찾을 수 없습니다.', 'no_room');
     const seat = findSeatByToken(room, msg.token);
     if (!seat) return sendError(ws, '이전 자리를 찾을 수 없습니다. 다시 입장해 주세요.', 'no_seat');
     attachSeat(ws, room, seat);
-    send(ws, { t: 'joined', gameId: room.gameId, code: room.code, token: seat.token, playerId: seat.id, resumed: true });
+    send(ws, { t: 'joined', gameId: room.gameId, classCode: room.classCode, code: room.code, token: seat.token, playerId: seat.id, number: seat.number, name: seat.name, resumed: true });
     touch(room, seat.name + '님이 다시 접속했습니다.');
     broadcastRoom(room);
     broadcastOverview();
@@ -431,13 +757,17 @@ function createHub(options) {
       return sendError(ws, '플레이할 수 없는 게임입니다.', 'bad_game');
     }
     if (ws.meta.room) return sendError(ws, '이미 방에 있습니다.', 'already_in_room');
-    const name = sanitizeNickname(msg.nickname);
-    if (!name) return sendError(ws, '닉네임을 입력해 주세요.', 'no_name');
+    const classCode = resolveClassFor(ws, msg.classCode);
+    if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
+    const number = msg.number !== undefined ? sanitizeNumber(msg.number) : null;
+    const name = number !== null ? numberName(number) : sanitizeNickname(msg.nickname);
+    if (!name) return sendError(ws, '출석번호를 입력해 주세요.', 'no_name');
 
-    const room = createCustomRoom(gameModule, name);
+    const room = createCustomRoom(gameModule, name, classCode);
     const seat = {
       id: 'p' + nextId(),
       token: crypto.randomBytes(12).toString('hex'),
+      number: number,
       name: name,
       ready: true,
       isBot: false,
@@ -448,7 +778,7 @@ function createHub(options) {
     room.seats.push(seat);
     room.hostId = seat.id;
     attachSeat(ws, room, seat);
-    send(ws, { t: 'joined', gameId: room.gameId, code: room.code, token: seat.token, playerId: seat.id, created: true });
+    send(ws, { t: 'joined', gameId: room.gameId, classCode: room.classCode, code: room.code, token: seat.token, playerId: seat.id, number: seat.number, name: seat.name, created: true });
     touch(room, name + '님이 방을 만들었습니다.');
     broadcastRoom(room);
     broadcastOverview();
@@ -471,10 +801,11 @@ function createHub(options) {
 
     stopBotLoop(room);
     room.game = room.gameModule.createGame(
-      room.seats.map(function (s) { return { id: s.id, name: s.name, isBot: s.isBot }; }),
+      room.seats.map(function (s) { return { id: s.id, name: s.name, number: s.number, isBot: s.isBot }; }),
       { endWhenTwo: room.endWhenTwo }
     );
     room.finishedAt = null;
+    room.resultRecorded = false;
     room.seats.forEach(function (s) { s.ready = false; });
     const last = room.game.log[room.game.log.length - 1];
     touch(room, last ? last.text : '게임을 시작했습니다.');
@@ -555,6 +886,96 @@ function createHub(options) {
     broadcastOverview();
   }
 
+  /* ---------------- 반 생성 · 입장 ---------------- */
+
+  /**
+   * 우리 반 만들기: 반 이름 + 교사 PIN → 반 코드와 우리 반 전용 링크를 발급합니다.
+   * PIN은 해시로만 저장하고, 응답에 담지 않습니다.
+   */
+  function createClassFor(ws, msg) {
+    const name = sanitizeClassName(msg.name);
+    if (!name) return sendError(ws, '반 이름을 입력해 주세요. (예: 3학년 2반)', 'bad_class_name');
+    const pin = sanitizePin(msg.pin);
+    if (!pin) return sendError(ws, '교사 비밀번호는 숫자 4~8자리로 정해 주세요.', 'bad_pin');
+
+    let code = sanitizeClassCode(msg.code);
+    if (code && code.length < 4) return sendError(ws, '반 코드는 4~8자로 정해 주세요.', 'bad_class_code');
+    if (!code) {
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const candidate = randomClassCode();
+        if (!classCodeTaken(candidate)) { code = candidate; break; }
+      }
+      if (!code) code = 'C' + Date.now().toString(36).toUpperCase().slice(-6);
+    }
+    if (code === DEFAULT_CLASS_CODE) return sendError(ws, '이미 쓰고 있는 코드입니다. 다른 코드를 정해 주세요.', 'class_exists');
+    if (classCodeTaken(code)) return sendError(ws, '이미 누군가 쓰고 있는 반 코드입니다. 다른 코드를 정해 주세요.', 'class_exists');
+
+    const cls = makeClass({ code: code, name: name, pin: pin, pinned: true });
+    classes.set(code, cls);
+    initClassRooms(code);
+    classStoreSave();
+
+    ws.meta.teacher = true;
+    ws.meta.classCode = code;
+    const token = newTeacherToken(cls);
+    ws.meta.teacherToken = token;
+
+    send(ws, {
+      t: 'class_created',
+      class: classInfo(cls),
+      teacherToken: token,
+      code: cls.code,
+      name: cls.name,
+      link: classLinkPath(cls.code)
+    });
+    send(ws, { t: 'rooms', classCode: cls.code, rooms: roomsOverview(null, cls.code) });
+    send(ws, { t: 'class_stats', classCode: cls.code, stats: classScoreList(cls.code) });
+    broadcastOverview();
+  }
+
+  /** 반 코드 확인 (학생 입장 전 존재 여부) — 이름만 돌려주고 PIN 정보는 주지 않습니다. */
+  function classInfoFor(ws, msg) {
+    const cls = getClass(msg.code);
+    if (!cls) return send(ws, { t: 'class_info', code: sanitizeClassCode(msg.code), exists: false, name: null });
+    send(ws, { t: 'class_info', code: cls.code, exists: true, name: cls.name, linkPath: classLinkPath(cls.code) });
+  }
+
+  /** 학생: 반 코드로 입장 → 그 반의 게임 선택 포털로 */
+  function enterClassFor(ws, msg) {
+    const cls = getClass(msg.code);
+    if (!cls) return sendError(ws, '그 반 코드를 찾을 수 없습니다. 선생님께 링크를 다시 받아 주세요.', 'no_class');
+    ws.meta.classCode = cls.code;
+    send(ws, { t: 'class_entered', class: classInfo(cls) });
+    send(ws, { t: 'rooms', classCode: cls.code, rooms: roomsOverview(null, cls.code) });
+    send(ws, { t: 'class_stats', classCode: cls.code, stats: classScoreList(cls.code) });
+  }
+
+  /** 선생님 확인: 반 코드 + PIN (또는 이전에 받은 교사 토큰) → 교사 기능 사용 가능 */
+  function authClassFor(ws, msg) {
+    const cls = getClass(msg.code);
+    if (!cls) return sendError(ws, '그 반 코드를 찾을 수 없습니다.', 'no_class');
+    if (ws.meta.failedPin >= 6) {
+      return sendError(ws, '비밀번호를 여러 번 틀렸습니다. 잠시 후 다시 시도해 주세요.', 'too_many_tries');
+    }
+    let ok = false;
+    if (msg.token && isTeacherToken(cls, msg.token)) ok = true;
+    const pin = sanitizePin(msg.pin);
+    if (!ok && pin) {
+      ok = safeEqualHex(hashPin(pin, cls.pinSalt), cls.pinHash);
+      if (!ok) ws.meta.failedPin = (ws.meta.failedPin || 0) + 1;
+    }
+    if (!ok) return sendError(ws, '교사 비밀번호가 맞지 않습니다.', 'bad_pin');
+
+    ws.meta.failedPin = 0;
+    ws.meta.teacher = true;
+    ws.meta.classCode = cls.code;
+    const token = newTeacherToken(cls);
+    ws.meta.teacherToken = token;
+    send(ws, { t: 'class_auth_ok', class: classInfo(cls), teacherToken: token });
+    send(ws, { t: 'rooms', classCode: cls.code, rooms: roomsOverview(null, cls.code) });
+    send(ws, { t: 'class_stats', classCode: cls.code, stats: classScoreList(cls.code) });
+  }
+
   /** 방장이 '게임 종료'를 눌렀을 때 → 대기실로 돌아갑니다. */
   function endGame(ws, room, seat) {
     if (!seat) return sendError(ws, '관전자는 게임을 종료할 수 없습니다.', 'spectator');
@@ -576,9 +997,14 @@ function createHub(options) {
   function resetRoomByTeacher(ws, msg) {
     const gameModule = games.get(msg.gameId || 'halligalli');
     if (!gameModule) return sendError(ws, '플레이할 수 없는 게임입니다.', 'bad_game');
-    const room = getRoom(gameModule.id, msg.code);
-    if (!room) return sendError(ws, '방을 찾을 수 없습니다.', 'no_room');
     if (ws.meta.seat) return sendError(ws, '참가 중인 학생은 방을 초기화할 수 없습니다.', 'not_teacher');
+    const classCode = resolveClassFor(ws, msg.classCode);
+    if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
+    if (!canTeach(ws, classCode)) {
+      return sendError(ws, '교사 비밀번호(PIN)로 인증한 뒤에 방을 초기화할 수 있습니다.', 'teacher_auth_required');
+    }
+    const room = getRoom(gameModule.id, msg.code, classCode);
+    if (!room) return sendError(ws, '방을 찾을 수 없습니다.', 'no_room');
 
     const removedSeats = room.seats.slice();
     resetToWaiting(room, { dropHumans: true });
@@ -614,10 +1040,25 @@ function createHub(options) {
         send(ws, { t: 'welcome', games: games.list(), rooms: roomsOverview(), serverTime: Date.now() });
         return;
       }
+      case 'classCreate':
+        return createClassFor(ws, msg);
+      case 'classStats': {
+        const code = resolveClassFor(ws, msg.code) || DEFAULT_CLASS_CODE;
+        send(ws, { t: 'class_stats', classCode: code, stats: classScoreList(code), serverTime: Date.now() });
+        return;
+      }
+      case 'classInfo':
+        return classInfoFor(ws, msg);
+      case 'classEnter':
+        return enterClassFor(ws, msg);
+      case 'classAuth':
+        return authClassFor(ws, msg);
       case 'overview': {
         overviewSubs.add(ws);
         if (!ws.meta.room) ws.meta.role = 'teacher';
-        send(ws, { t: 'rooms', gameId: msg.gameId || null, rooms: roomsOverview(msg.gameId) });
+        const code = resolveClassFor(ws, msg.classCode) || DEFAULT_CLASS_CODE;
+        const list = roomsOverview(msg.gameId || null, code);
+        send(ws, { t: 'rooms', gameId: msg.gameId || null, classCode: code, rooms: list });
         return;
       }
       case 'join':
@@ -638,14 +1079,19 @@ function createHub(options) {
       case 'spectate': {
         const gameModule = games.get(msg.gameId);
         if (!gameModule) return sendError(ws, '플레이할 수 없는 게임입니다.', 'bad_game');
-        const room = getRoom(gameModule.id, msg.code);
+        const classCode = resolveClassFor(ws, msg.classCode);
+        if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
+        if (!canTeach(ws, classCode)) {
+          return sendError(ws, '교사 비밀번호(PIN)로 인증한 뒤에 관전할 수 있습니다.', 'teacher_auth_required');
+        }
+        const room = getRoom(gameModule.id, msg.code, classCode);
         if (!room) return sendError(ws, '방을 찾을 수 없습니다.', 'no_room');
         if (ws.meta.room && ws.meta.room !== room) leaveRoom(ws);
         room.spectators.add(ws);
         ws.meta.room = room;
         ws.meta.seat = null;
         ws.meta.role = 'spectator';
-        send(ws, { t: 'spectating', gameId: room.gameId, code: room.code, name: room.name });
+        send(ws, { t: 'spectating', gameId: room.gameId, classCode: room.classCode, code: room.code, name: room.name });
         send(ws, { t: 'room', room: roomStateFor(room, null, 'spectator') });
         return;
       }
@@ -694,6 +1140,7 @@ function createHub(options) {
         room.seats.push({
           id: 'b' + nextId(),
           token: null,
+          number: null,
           name: botName,
           ready: true,
           isBot: true,
@@ -739,6 +1186,7 @@ function createHub(options) {
         if (room.game.status !== 'playing') {
           room.finishedAt = Date.now();
           stopBotLoop(room);
+          sendClassResult(room, recordGameResult(room));
         }
         broadcastRoom(room);
         broadcastOverview();
@@ -764,7 +1212,17 @@ function createHub(options) {
     }
     if (pathname === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ ok: true, rooms: rooms.size, uptime: Math.round(process.uptime()) }));
+      res.end(JSON.stringify({ ok: true, rooms: rooms.size, classes: classes.size, uptime: Math.round(process.uptime()) }));
+      return;
+    }
+    // 우리 반 코드가 살아 있는지 한눈에 확인할 때 쓰는 읽기 전용 API (PIN 정보는 내보내지 않음)
+    const classMatch = /^\/api\/classes\/([A-Za-z0-9]{4,8})$/.exec(pathname);
+    if (classMatch) {
+      const cls = getClass(classMatch[1]);
+      res.writeHead(cls ? 200 : 404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(cls
+        ? { ok: true, class: { code: cls.code, name: cls.name, linkPath: classLinkPath(cls.code) } }
+        : { ok: false, error: 'no_class' }));
       return;
     }
     if (pathname === '/') pathname = '/index.html';
@@ -790,10 +1248,25 @@ function createHub(options) {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 64 * 1024 });
 
   wss.on('connection', function (ws) {
-    ws.meta = { role: 'lobby', room: null, seat: null, id: 'c' + nextId() };
+    ws.meta = {
+      role: 'lobby',
+      room: null,
+      seat: null,
+      classCode: null,
+      teacher: false,
+      teacherToken: null,
+      failedPin: 0,
+      id: 'c' + nextId()
+    };
     ws.isAlive = true;
     connections.add(ws);
-    send(ws, { t: 'welcome', games: games.list(), rooms: roomsOverview(), serverTime: Date.now() });
+    send(ws, {
+      t: 'welcome',
+      games: games.list(),
+      rooms: roomsOverview(null, DEFAULT_CLASS_CODE),
+      classCode: DEFAULT_CLASS_CODE,
+      serverTime: Date.now()
+    });
 
     ws.on('pong', function () { ws.isAlive = true; });
     ws.on('message', function (raw) {
@@ -857,11 +1330,15 @@ function createHub(options) {
     httpServer: httpServer,
     wss: wss,
     rooms: rooms,
+    classes: classes,
     settings: settings,
     start: start,
     close: close,
     roomsOverview: roomsOverview,
-    getRoom: getRoom
+    getRoom: getRoom,
+    getClass: getClass,
+    isTeacherToken: isTeacherToken,
+    classScores: classScoreList
   };
 }
 
@@ -886,14 +1363,15 @@ if (require.main === module) {
   hub.start().then(function (info) {
     const port = info.port;
     console.log('');
-    console.log('  🔔  모둠 보드게임 서버가 시작되었습니다.');
+    console.log('  🔔  보드게임천국 서버가 시작되었습니다.');
     console.log('');
     console.log('  내 컴퓨터 :  http://localhost:' + port);
     for (const url of info.urls) {
       console.log('  같은 와이파이(모둠원) :  ' + url);
     }
     console.log('');
-    console.log('  교사 관전 :  /#/halligalli/teacher  (또는 사이트 첫 화면에서 [교사 관전])');
+    console.log('  첫 화면   :  ' + (info.urls[0] || 'http://localhost:' + port) + '  → [👩‍🏫 우리 반 만들기]');
+    console.log('  교사 관전 :  사이트 첫 화면 또는 우리 반 링크 → [👩‍🏫 선생님 모드] (교사 PIN 필요)');
     console.log('  종료하려면 Ctrl+C');
     console.log('');
   }).catch(function (err) {

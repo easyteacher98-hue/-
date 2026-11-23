@@ -36,8 +36,7 @@ const get = (p) => execSync(`curl -s -m 20 '${BASE}${p}'`, { encoding: 'utf8', m
     close() {}
   };
 
-  // 할리갈리 입장 화면으로 이동
-  win.location.hash = '#/halligalli';
+  // 첫 화면(우리 반 만들기 / 반 코드 입장)에서 시작
 
   let mutations = 0;
   const appEl = win.document.getElementById('app');
@@ -52,8 +51,10 @@ const get = (p) => execSync(`curl -s -m 20 '${BASE}${p}'`, { encoding: 'utf8', m
   }
   obs.disconnect();
 
-  const badgeOffline = (win.document.getElementById('app').textContent || '').includes('서버 연결 안 됨');
-  const botButton = (win.document.getElementById('app').textContent || '').includes('AI 봇과 연습');
+  const appText = win.document.getElementById('app').textContent || '';
+  const badgeOffline = appText.includes('서버 연결 없음');
+  const islanding = appText.includes('우리 반 만들기') && appText.includes('반 코드로 입장');
+  const botButton = appText.includes('AI 봇 연습');
 
   console.log(JSON.stringify({
     hasGuardInServed,
@@ -64,6 +65,7 @@ const get = (p) => execSync(`curl -s -m 20 '${BASE}${p}'`, { encoding: 'utf8', m
     netOffline: win.BG.net.offline,
     attempts: win.BG.net.attempts,
     badgeOffline,
+    landing: islanding,
     botButton,
   }, null, 2));
   win.close();

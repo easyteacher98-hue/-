@@ -8,7 +8,8 @@ services:
     name: halligalli-web
     runtime: node
     plan: free
-    buildCommand: npm install
+    # jsdom은 테스트용 devDependency라 운영 배포에서는 설치하지 않습니다. (배포 시간 단축)
+    buildCommand: npm install --omit=dev
     startCommand: npm start
     healthCheckPath: /health
     autoDeployTrigger: commit

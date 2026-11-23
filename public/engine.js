@@ -103,11 +103,13 @@
         return {
           id: String(p.id),
           name: clampName(p.name, '플레이어' + (i + 1)),
+          number: (p.number === undefined || p.number === null || p.number === '') ? null : Number(p.number),
           isBot: !!p.isBot,
           seat: i,
           deck: [],       // index 0 = 맨 위
           pile: [],       // 마지막 원소 = 맨 위(공개 카드)
-          eliminated: false
+          eliminated: false,
+          bells: { correct: 0, wrong: 0 }
         };
       });
       const ids = new Set(this.players.map(function (p) { return p.id; }));
@@ -122,6 +124,7 @@
       this.bellLockUntil = 0;
       this.lastBell = null;
       this.bells = { correct: 0, wrong: 0 };
+      this.outOrder = []; // 탈락 순서 (먼저 탈락한 사람이 앞)
       this.startedAt = null;
 
       this.deal();
@@ -265,6 +268,7 @@
         for (const c of collected) player.deck.push(c);
 
         this.bells.correct += 1;
+        player.bells.correct += 1;
         this.bellLockUntil = timestamp + 600;
         this.lastBell = {
           playerId: player.id,
@@ -301,6 +305,7 @@
         }
       }
       this.bells.wrong += 1;
+      player.bells.wrong += 1;
       this.bellLockUntil = timestamp + 450;
       this.lastBell = {
         playerId: player.id,
@@ -328,6 +333,7 @@
         const out = p.deck.length === 0 && p.pile.length === 0;
         if (out && !p.eliminated) {
           p.eliminated = true;
+          if (this.outOrder.indexOf(p.id) === -1) this.outOrder.push(p.id);
           this.pushLog('eliminate', p.name + '님 카드가 모두 떨어져 탈락!');
         }
       }
@@ -386,6 +392,39 @@
       }
     }
 
+    /**
+     * 최종 순위: 1등(우승) → 늦게 탈락한 순 → 남은 카드 수
+     * 결과 팝업에 그대로 쓰는 형태로 돌려줍니다.
+     */
+    ranking() {
+      const self = this;
+      const cards = function (p) { return p.deck.length + p.pile.length; };
+      const outIndex = function (p) { return self.outOrder.indexOf(p.id); };
+      const sorted = this.players.slice().sort(function (a, b) {
+        if (a.id === self.winnerId) return -1;
+        if (b.id === self.winnerId) return 1;
+        const ao = outIndex(a);
+        const bo = outIndex(b);
+        if (ao >= 0 && bo >= 0) return bo - ao;
+        if (ao >= 0) return 1;
+        if (bo >= 0) return -1;
+        return cards(b) - cards(a);
+      });
+      return sorted.map(function (p, i) {
+        return {
+          rank: i + 1,
+          id: p.id,
+          name: p.name,
+          number: p.number === undefined ? null : p.number,
+          isBot: p.isBot,
+          cards: cards(p),
+          eliminated: p.eliminated,
+          outOrder: outIndex(p) >= 0 ? outIndex(p) + 1 : null,
+          bells: { correct: p.bells.correct, wrong: p.bells.wrong }
+        };
+      });
+    }
+
     /* ---------- 직렬화 ---------- */
     stateFor(viewerId) {
       const self = this;
@@ -398,6 +437,7 @@
           return {
             id: p.id,
             name: p.name,
+            number: p.number === undefined ? null : p.number,
             seat: p.seat,
             isBot: p.isBot,
             deckCount: p.deck.length,
@@ -405,10 +445,12 @@
             totalCards: p.deck.length + p.pile.length,
             top: top,
             eliminated: p.eliminated,
+            bells: { correct: p.bells.correct, wrong: p.bells.wrong },
             isTurn: p.id === currentId,
             isSelf: p.id === viewerId
           };
         }),
+        ranking: this.ranking(),
         fruits: FRUITS,
         counts: this.fruitCounts(),
         tableCount: this.tableCardCount(),
@@ -422,6 +464,7 @@
         bells: this.bells,
         bellLocked: Date.now() < this.bellLockUntil,
         totalCards: this.totalCards(),
+        outOrder: this.outOrder.slice(),
         startedAt: this.startedAt
       };
     }

@@ -65,7 +65,7 @@ test('HTTP: 첫 화면과 health, 공용 엔진 파일을 제공한다', async f
     const home = await fetch(env.http + '/');
     assert.equal(home.status, 200);
     const html = await home.text();
-    assert.match(html, /모둠 보드게임/);
+    assert.match(html, /보드게임천국/);
     assert.match(html, /engine\.js/);
 
     const health = await fetch(env.http + '/health');

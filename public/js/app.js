@@ -11,7 +11,9 @@
 
   BG.state = {
     route: { name: 'portal', path: '/' },
-    nickname: ''
+    classCode: '',
+    className: '',
+    number: ''
   };
 
   /* ---------- 저장소 ---------- */
@@ -59,7 +61,132 @@
 
   BG.storage = storage;
   BG.session = session;
-  BG.state.nickname = storage.get('bg.nickname', '') || '';
+
+  /* ---------- 반(교실) ---------- */
+
+  function cleanClassCode(raw) {
+    return String(raw === undefined || raw === null ? '' : raw)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 8);
+  }
+
+  BG.cleanClassCode = cleanClassCode;
+
+  BG.state.classCode = cleanClassCode(storage.get('bg.class', ''));
+
+  /** 우리 반 코드를 기억하고, 학생별 출석번호도 반별로 저장합니다. */
+  BG.setClass = function (code, name) {
+    const clean = cleanClassCode(code);
+    BG.state.classCode = clean;
+    BG.state.className = name || '';
+    if (clean) storage.set('bg.class', clean);
+    else storage.remove('bg.class');
+  };
+
+  BG.className = function () {
+    return BG.state.className || (BG.state.classCode ? BG.state.classCode + ' 반' : '');
+  };
+
+  BG.classLink = function (code) {
+    const target = cleanClassCode(code) || BG.state.classCode;
+    const base = location.origin && location.origin !== 'null'
+      ? location.origin + location.pathname
+      : location.href.split('#')[0].split('?')[0];
+    return base + '?class=' + target;
+  };
+
+  BG.numberFor = function (code) {
+    const map = storage.get('bg.numbers', {}) || {};
+    const key = cleanClassCode(code) || BG.state.classCode || '-';
+    return map[key] ? String(map[key]) : '';
+  };
+
+  BG.setNumberFor = function (code, value) {
+    const digits = String(value === undefined || value === null ? '' : value).replace(/[^0-9]/g, '').slice(0, 2);
+    const key = cleanClassCode(code) || BG.state.classCode || '-';
+    const map = storage.get('bg.numbers', {}) || {};
+    if (digits) map[key] = digits;
+    else delete map[key];
+    storage.set('bg.numbers', map);
+    BG.state.number = digits;
+    return digits;
+  };
+
+  BG.state.number = BG.numberFor(BG.state.classCode);
+
+  /* ---------- 내 기록 (반 코드 + 출석번호, 브라우저 저장) ---------- */
+
+  function recordKey(code, number) {
+    return (cleanClassCode(code) || '-') + ':' + String(number || '');
+  }
+
+  BG.myRecord = function (code, number) {
+    const n = Number(number);
+    if (!n) return { wins: 0, points: 0, plays: 0 };
+    const all = storage.get('bg.records', {}) || {};
+    const rec = all[recordKey(code, n)] || {};
+    return { wins: rec.wins || 0, points: rec.points || 0, plays: rec.plays || 0 };
+  };
+
+  /** 같은 결과(recordedAt)를 두 탭에서 두 번 더하지 않도록 한 번만 기록합니다. */
+  BG.markResultSeen = function (key) {
+    if (key === undefined || key === null) return true;
+    const seen = storage.get('bg.seenResults', []);
+    const list = Array.isArray(seen) ? seen : [];
+    if (list.indexOf(key) !== -1) return false;
+    list.push(key);
+    storage.set('bg.seenResults', list.slice(-100));
+    return true;
+  };
+
+  /** 게임 결과를 내 브라우저 기록에 더합니다. (서버와 별개로 기기에 남는 내 기록) */
+  BG.addRecord = function (code, number, gain) {
+    const n = Number(number);
+    if (!n) return BG.myRecord(code, 0);
+    const all = storage.get('bg.records', {}) || {};
+    const key = recordKey(code, n);
+    const rec = all[key] || { wins: 0, points: 0, plays: 0 };
+    rec.wins = (rec.wins || 0) + (gain && gain.wins ? gain.wins : 0);
+    rec.points = (rec.points || 0) + (gain && gain.points ? gain.points : 0);
+    rec.plays = (rec.plays || 0) + 1;
+    all[key] = rec;
+    storage.set('bg.records', all);
+    return { wins: rec.wins, points: rec.points, plays: rec.plays };
+  };
+
+  /* ?class=반코드 로 들어오면 바로 그 반의 게임 선택 화면으로 보냅니다. */
+  let urlClass = '';
+  try {
+    urlClass = cleanClassCode(new URLSearchParams(window.location.search).get('class'));
+  } catch (err) {
+    urlClass = '';
+  }
+  if (urlClass) {
+    BG.setClass(urlClass, BG.state.className);
+    const currentPath = (window.location.hash || '').replace(/^#/, '') || '/';
+    if (currentPath === '/') {
+      try {
+        window.history.replaceState(null, '', '#/class/' + urlClass);
+      } catch (err) {
+        window.location.hash = '#/class/' + urlClass;
+      }
+    }
+  }
+
+  /* 최근에 만든 반 (선생님 기기에만 남는 목록) */
+  BG.recentClasses = function () {
+    const list = storage.get('bg.classes', []);
+    return Array.isArray(list) ? list : [];
+  };
+
+  BG.rememberClass = function (cls) {
+    if (!cls || !cls.code) return;
+    const code = cleanClassCode(cls.code);
+    const list = BG.recentClasses().filter(function (item) { return item.code !== code; });
+    list.unshift({ code: code, name: String(cls.name || '').slice(0, 20), at: Date.now() });
+    storage.set('bg.classes', list.slice(0, 5));
+  };
 
   /* ---------- UI ---------- */
   let toastTimer = null;
@@ -187,9 +314,16 @@
   /* ---------- 입력 ---------- */
   document.addEventListener('input', function (event) {
     const el = event.target;
-    if (el && el.id === 'nickname') {
-      BG.state.nickname = el.value;
-      storage.set('bg.nickname', el.value);
+    if (!el) return;
+    if (el.id === 'number') {
+      // 번호는 숫자만 (모바일에서는 숫자 키패드가 뜹니다)
+      const digits = String(el.value || '').replace(/[^0-9]/g, '').slice(0, 2);
+      if (el.value !== digits) el.value = digits;
+      BG.setNumberFor(BG.state.classCode, digits);
+    }
+    if (el.id === 'join-class-code' || el.id === 'class-code') {
+      const clean = cleanClassCode(el.value);
+      if (el.value !== clean) el.value = clean;
     }
   });
 

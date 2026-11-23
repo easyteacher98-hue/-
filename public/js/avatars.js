@@ -130,7 +130,7 @@
     return ANIMALS.find(function (a) { return a.id === animalId; }) || ANIMALS[0];
   }
 
-  /** 닉네임(또는 좌석 id)으로 동물을 고릅니다. 같은 이름은 항상 같은 동물. */
+  /** 번호(또는 이름/좌석 id)로 동물을 고릅니다. 같은 번호는 항상 같은 동물. */
   function forKey(key) {
     const animal = ANIMALS[hash(key) % ANIMALS.length];
     return { id: animal.id, name: animal.name };
@@ -143,13 +143,19 @@
 
   /**
    * 아바타 HTML
-   * @param {string|{name?:string,id?:string}} who 이름 또는 {name, id}
+   * - 번호(출석번호)가 있으면 번호로 동물을 정해, 같은 번호는 언제나 같은 동물이 나옵니다.
+   * @param {string|{name?:string,id?:string,number?:number|string}} who 이름 또는 {name, id, number}
    * @param {'xs'|'sm'|'md'|'lg'} size
    */
   function html(who, size) {
-    const key = typeof who === 'string'
-      ? who
-      : (who && (who.name || who.id)) || '';
+    let key;
+    if (typeof who === 'string') {
+      key = who;
+    } else if (who && who.number !== undefined && who.number !== null && who.number !== '') {
+      key = 'no:' + who.number;
+    } else {
+      key = (who && (who.name || who.id)) || '';
+    }
     const animal = forKey(key);
     const label = size === 'xs' ? 'xs' : size === 'sm' ? 'sm' : size === 'lg' ? 'lg' : 'md';
     return '<span class="avatar a-' + animal.id + ' ' + label + '" title="' + animal.name + ' 아바타" aria-hidden="true">' +
