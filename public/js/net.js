@@ -42,6 +42,15 @@
 
     connect() {
       if (net.ws && (net.ws.readyState === WebSocket.OPEN || net.ws.readyState === WebSocket.CONNECTING)) return;
+      // 재접속 한도를 넘었으면 더 이상 소켓을 열지 않습니다.
+      // (GitHub Pages처럼 서버가 아예 없는 곳에서 화면이 계속 다시 그려지는 것을 막습니다)
+      if (net.attempts >= net.maxAttempts) {
+        if (!net.offline) {
+          net.offline = true;
+          net.emit('offline');
+        }
+        return;
+      }
       const url = net.url();
       if (!url) {
         net.offline = true;
@@ -87,6 +96,10 @@
           const delay = Math.min(6000, 800 * net.attempts);
           clearTimeout(net.reconnectTimer);
           net.reconnectTimer = setTimeout(function () { net.connect(); }, delay);
+        } else if (!net.offline) {
+          // 재접속 한도 초과 — 오프라인으로 확정하고 다시 시도하지 않습니다.
+          net.offline = true;
+          net.emit('offline');
         }
       };
 

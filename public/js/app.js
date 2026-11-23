@@ -232,11 +232,19 @@
     BG.render();
   }
 
+  let wasConnected = false;
+
   BG.net.on('open', function () {
+    wasConnected = true;
     if (document.body.dataset.screen) BG.render();
   });
 
   BG.net.on('close', function () {
+    // 연결이 끊겼을 때만 화면을 다시 그립니다. (서버 없는 정적 사이트에서
+    // 실패한 연결 시도마다 화면이 새로 그려져 버튼을 누르기 어려워지는 것을 막습니다)
+    const was = wasConnected;
+    wasConnected = false;
+    if (!was) return;
     if (['halligalli', 'hg.room', 'hg.teacher', 'hg.watch'].indexOf(document.body.dataset.screen) !== -1) {
       BG.render();
     }
