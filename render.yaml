@@ -16,3 +16,9 @@ services:
     envVars:
       - key: GROUP_CAPACITY
         value: "4"
+      # 반 목록 + 반별 랭킹을 영구 보관하려면 Upstash Redis REST 값을 넣으세요. (README 8-3 참고)
+      # 값은 저장소에 올리지 않고 Render 대시보드 Environment 에서 직접 넣습니다.
+      # - key: UPSTASH_REDIS_REST_URL
+      #   sync: false
+      # - key: UPSTASH_REDIS_REST_TOKEN
+      #   sync: false

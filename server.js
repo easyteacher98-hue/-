@@ -99,6 +99,114 @@ function safeEqualHex(a, b) {
   return crypto.timingSafeEqual(ba, bb);
 }
 
+/* ---------------- Upstash Redis 영구 저장 (선택) ----------------
+ *
+ * UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN 이 설정되어 있으면 반 목록(교사 PIN
+ * 해시 포함)과 반별 누적 기록(classStats: 번호별 플레이·승리·포인트)을 Upstash Redis REST
+ * API 에 비동기로 저장합니다. 그래서 Render 무료 서버가 잠들거나 다시 배포되어도 자료가
+ * 남습니다. 설정이 없으면 예전처럼 data/classes.json + 메모리로만 동작합니다.
+ *
+ * npm 패키지를 더하지 않고 Node 18+ 내장 fetch 만 사용합니다.
+ */
+
+const REDIS_CLASSES_KEY = 'halligalli:classes';
+const REDIS_CLASS_STATS_KEY = 'halligalli:classStats';
+const REDIS_TIMEOUT_MS = 5000;
+
+/**
+ * Upstash Redis REST API 최소 클라이언트.
+ * - get/set/pipeline 만 쓰고, 실패는 모두 예외로 던져 호출한 쪽이 로그만 남기고 계속하게 합니다.
+ * - 토큰은 밖으로 내보내지 않습니다.
+ */
+function createRedisStore(config) {
+  const cfg = config || {};
+  const url = String(cfg.url || '').trim().replace(/\/+$/, '');
+  const token = String(cfg.token || '').trim();
+  const timeoutMs = Number(cfg.timeoutMs) > 0 ? Number(cfg.timeoutMs) : REDIS_TIMEOUT_MS;
+  const fetchImpl = typeof cfg.fetch === 'function'
+    ? cfg.fetch
+    : (typeof fetch === 'function' ? fetch : null);
+  const enabled = !!(url && token && fetchImpl);
+
+  async function request(pathname, body) {
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+    if (timer.unref) timer.unref();
+    try {
+      const headers = { Authorization: 'Bearer ' + token };
+      let payload;
+      if (body !== undefined) {
+        headers['Content-Type'] = 'text/plain; charset=utf-8';
+        payload = String(body);
+      }
+      const res = await fetchImpl(url + pathname, {
+        method: payload === undefined ? 'GET' : 'POST',
+        headers: headers,
+        body: payload,
+        signal: controller.signal
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (err) { data = null; }
+      if (!res.ok) {
+        const detail = data && data.error ? String(data.error) : String(text || '').slice(0, 160);
+        throw new Error('HTTP ' + res.status + (detail ? ' – ' + detail : ''));
+      }
+      if (data && data.error) throw new Error(String(data.error));
+      return data;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function resultOf(entry) {
+    if (!entry || typeof entry !== 'object' || !('result' in entry)) return null;
+    return entry.result === undefined ? null : entry.result;
+  }
+
+  async function get(key) {
+    const value = resultOf(await request('/get/' + encodeURIComponent(key)));
+    return value === null || value === undefined ? null : String(value);
+  }
+
+  async function set(key, value) {
+    const result = resultOf(await request('/set/' + encodeURIComponent(key), String(value)));
+    if (result !== 'OK') throw new Error('예상하지 못한 응답: ' + JSON.stringify(result));
+    return true;
+  }
+
+  /** 여러 명령을 한 번의 요청으로: [['SET', key, value], ['GET', key]] */
+  async function pipeline(commands) {
+    if (!Array.isArray(commands) || !commands.length) return [];
+    const data = await request('/pipeline', JSON.stringify(commands));
+    if (!Array.isArray(data)) throw new Error('파이프라인 응답을 해석하지 못했습니다.');
+    for (const entry of data) {
+      if (entry && entry.error) throw new Error(String(entry.error));
+    }
+    return data;
+  }
+
+  async function getJSON(key) {
+    const raw = await get(key);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      console.warn('[hub] Upstash Redis 값(' + key + ')을 JSON으로 읽지 못했습니다.');
+      return null;
+    }
+  }
+
+  return {
+    enabled: enabled,
+    url: url,
+    get: get,
+    set: set,
+    getJSON: getJSON,
+    pipeline: pipeline
+  };
+}
+
 function createHub(options) {
   const opts = options || {};
   const settings = {
@@ -110,6 +218,18 @@ function createHub(options) {
       ? null
       : (opts.storePath || process.env.CLASS_STORE || path.join(__dirname, 'data', 'classes.json'))
   };
+
+  /* Upstash Redis 는 환경변수가 있을 때만 켜집니다. (opts.redis === false 로 끌 수 있음) */
+  const redisUrl = opts.redisUrl || process.env.UPSTASH_REDIS_REST_URL || '';
+  const redisToken = opts.redisToken || process.env.UPSTASH_REDIS_REST_TOKEN || '';
+  const redis = createRedisStore(opts.redis === false ? {} : {
+    url: redisUrl,
+    token: redisToken,
+    fetch: opts.redisFetch,
+    timeoutMs: opts.redisTimeoutMs
+  });
+  settings.redisEnabled = redis.enabled;
+  settings.persistence = redis.enabled ? 'upstash' : (settings.storePath ? 'file' : 'memory');
 
   const rooms = new Map();        // `${classCode}|${gameId}:${code}` -> room
   const classes = new Map();      // 반 코드 -> { code, name, pinHash, pinSalt, createdAt }
@@ -244,6 +364,9 @@ function createHub(options) {
       points[row.number] = gain;
     });
 
+    // 번호별 승수·포인트가 바뀌었으니 반별 기록을 남깁니다.
+    schedulePersist();
+
     return {
       t: 'game_result',
       classCode: room.classCode,
@@ -272,36 +395,8 @@ function createHub(options) {
     }
   }
 
-  function classStoreLoad() {
-    if (!settings.storePath) return;
-    let raw;
-    try {
-      raw = fs.readFileSync(settings.storePath, 'utf8');
-    } catch (err) {
-      return;
-    }
-    try {
-      const data = JSON.parse(raw);
-      for (const item of (data && data.classes) || []) {
-        const code = sanitizeClassCode(item.code);
-        if (!code || code === DEFAULT_CLASS_CODE) continue;
-        if (!item.pinHash || !item.pinSalt) continue;
-        classes.set(code, makeClass({
-          code: code,
-          name: sanitizeClassName(item.name) || code + ' 반',
-          pinned: true,
-          pinSalt: String(item.pinSalt),
-          pinHash: String(item.pinHash),
-          createdAt: Number(item.createdAt) || Date.now()
-        }));
-      }
-    } catch (err) {
-      console.error('[hub] 반 목록 파일을 읽지 못했습니다:', err.message);
-    }
-  }
-
-  function classStoreSave() {
-    if (!settings.storePath) return;
+  /** 파일·Upstash 에 저장할 반 목록 (PIN 원문은 절대 넣지 않습니다) */
+  function classStoreData() {
     const list = [];
     for (const cls of classes.values()) {
       if (cls.code === DEFAULT_CLASS_CODE) continue;
@@ -313,16 +408,246 @@ function createHub(options) {
         createdAt: cls.createdAt
       });
     }
+    return { version: CLASS_STORE_VERSION, classes: list };
+  }
+
+  /** 반별 누적 기록(번호별 플레이·승리·포인트)을 JSON 으로 */
+  function classStatsData() {
+    const stats = {};
+    for (const entry of classScores) {
+      const code = entry[0];
+      const map = entry[1];
+      if (code === DEFAULT_CLASS_CODE) continue;
+      if (!map || !map.size) continue;
+      const list = [];
+      for (const rec of map.values()) {
+        list.push({ number: rec.number, plays: rec.plays, wins: rec.wins, points: rec.points });
+      }
+      stats[code] = list;
+    }
+    return { version: CLASS_STORE_VERSION, stats: stats };
+  }
+
+  /**
+   * 저장된 반 목록을 지금 반 목록에 합칩니다.
+   * options.override: 같은 반 코드가 이미 있으면 저장된 값으로 덮어씁니다(Upstash 복원).
+   * 돌려주는 값은 새로 추가된 반 수입니다.
+   */
+  function loadClassList(data, options) {
+    const opts = options || {};
+    const list = data && Array.isArray(data.classes) ? data.classes : [];
+    let added = 0;
+    for (const item of list) {
+      if (!item) continue;
+      const code = sanitizeClassCode(item.code);
+      if (!code || code === DEFAULT_CLASS_CODE) continue;
+      if (!item.pinHash || !item.pinSalt) continue;
+      const existed = classes.has(code);
+      if (existed && !opts.override) continue;
+      classes.set(code, makeClass({
+        code: code,
+        name: sanitizeClassName(item.name) || code + ' 반',
+        pinned: true,
+        pinSalt: String(item.pinSalt),
+        pinHash: String(item.pinHash),
+        createdAt: Number(item.createdAt) || Date.now()
+      }));
+      if (!existed) added += 1;
+    }
+    return added;
+  }
+
+  /** 저장된 반별 누적 기록을 지금 기록에 합칩니다. 돌려주는 값은 불러온 기록 수입니다. */
+  function loadClassStats(data) {
+    const stats = data && data.stats && typeof data.stats === 'object' ? data.stats : null;
+    if (!stats) return 0;
+    let loaded = 0;
+    for (const rawCode of Object.keys(stats)) {
+      const code = sanitizeClassCode(rawCode);
+      if (!code) continue;
+      const list = Array.isArray(stats[rawCode]) ? stats[rawCode] : [];
+      const map = scoreMap(code);
+      for (const item of list) {
+        if (!item) continue;
+        const number = Number(item.number);
+        if (!Number.isInteger(number) || number < 1 || number > 99) continue;
+        const prev = map.get(number) || { number: number, plays: 0, wins: 0, points: 0 };
+        // 누적 기록은 줄어들지 않으므로 둘 중 큰 값을 남깁니다.
+        // (Redis 가 잠깐 끊긴 동안 쌓인 기록도 잃지 않게)
+        map.set(number, {
+          number: number,
+          plays: Math.max(prev.plays, Math.floor(Number(item.plays) || 0)),
+          wins: Math.max(prev.wins, Math.floor(Number(item.wins) || 0)),
+          points: Math.max(prev.points, Math.floor(Number(item.points) || 0))
+        });
+        loaded += 1;
+      }
+    }
+    return loaded;
+  }
+
+  function classStoreLoad() {
+    if (!settings.storePath) return;
+    let raw;
+    try {
+      raw = fs.readFileSync(settings.storePath, 'utf8');
+    } catch (err) {
+      return;
+    }
+    try {
+      loadClassList(JSON.parse(raw));
+    } catch (err) {
+      console.error('[hub] 반 목록 파일을 읽지 못했습니다:', err.message);
+    }
+  }
+
+  function classStoreSave() {
+    if (!settings.storePath) return;
     const dir = path.dirname(settings.storePath);
     const tmp = settings.storePath + '.' + process.pid + '.tmp';
     try {
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(tmp, JSON.stringify({ version: CLASS_STORE_VERSION, classes: list }, null, 2), { mode: 0o600 });
+      fs.writeFileSync(tmp, JSON.stringify(classStoreData(), null, 2), { mode: 0o600 });
       fs.renameSync(tmp, settings.storePath);
     } catch (err) {
       console.error('[hub] 반 목록을 저장하지 못했습니다:', err.message);
       try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }
     }
+  }
+
+  /* ---------------- Upstash Redis 저장·복원 ----------------
+   * - 복원(hydrate)이 성공한 뒤에만 저장합니다. (Redis 가 잠깐 안 될 때 빈 목록으로 덮어쓰지 않게)
+   * - 저장은 150ms 모아서 파이프라인 1회로 보냅니다. 실패하면 콘솔 경고만 남기고 계속 동작합니다.
+   */
+
+  let hydratePromise = null;
+  let remoteReady = false;
+  let hydrateWarned = false;
+  let persistTimer = null;
+  let persistChain = Promise.resolve(false);
+  let persistFailStreak = 0;
+
+  function initRoomsForMissingClasses() {
+    for (const code of classes.keys()) {
+      if (code === DEFAULT_CLASS_CODE) continue;
+      let has = false;
+      for (const room of rooms.values()) {
+        if (room.classCode === code) { has = true; break; }
+      }
+      if (!has) initClassRooms(code);
+    }
+  }
+
+  async function doHydrate() {
+    const rows = await redis.pipeline([
+      ['GET', REDIS_CLASSES_KEY],
+      ['GET', REDIS_CLASS_STATS_KEY]
+    ]);
+    const classesRaw = rows && rows[0] ? rows[0].result : null;
+    const statsRaw = rows && rows[1] ? rows[1].result : null;
+
+    let classesData = null;
+    let statsData = null;
+    if (classesRaw) {
+      try {
+        classesData = JSON.parse(String(classesRaw));
+      } catch (err) {
+        console.warn('[hub] Upstash Redis의 반 목록을 읽지 못했습니다. (형식 오류)');
+      }
+    }
+    if (statsRaw) {
+      try {
+        statsData = JSON.parse(String(statsRaw));
+      } catch (err) {
+        console.warn('[hub] Upstash Redis의 반별 기록을 읽지 못했습니다. (형식 오류)');
+      }
+    }
+
+    const addedClasses = classesData ? loadClassList(classesData, { override: true }) : 0;
+    const loadedStats = statsData ? loadClassStats(statsData) : 0;
+    if (addedClasses || loadedStats) {
+      console.log('[hub] Upstash Redis에서 복원 – 반 ' + addedClasses + '개, 반별 기록 ' + loadedStats + '건');
+      initRoomsForMissingClasses();
+    }
+
+    // 처음 연결해서 Redis 가 비어 있으면, 로컬 파일에 있던 반 목록을 올려 둡니다.
+    if (!classesRaw && classes.size > 1) schedulePersist();
+    return true;
+  }
+
+  /** Redis 복원. 진행 중/완료된 복원이 있으면 그것을 그대로 돌려줍니다. */
+  function hydrateFromRedis() {
+    if (!redis.enabled) return Promise.resolve(false);
+    if (remoteReady) return Promise.resolve(true);
+    if (hydratePromise) return hydratePromise;
+    hydratePromise = doHydrate().then(function () {
+      remoteReady = true;
+      hydrateWarned = false;
+      return true;
+    }).catch(function (err) {
+      hydratePromise = null; // 다음 저장 때 다시 시도합니다.
+      if (!hydrateWarned) {
+        hydrateWarned = true;
+        console.warn('[hub] Upstash Redis에서 저장된 자료를 불러오지 못했습니다. 로컬/메모리로 계속합니다:', err.message);
+      }
+      return false;
+    });
+    return hydratePromise;
+  }
+
+  function persistNow() {
+    if (!redis.enabled) return Promise.resolve(false);
+    return hydrateFromRedis().then(function (ready) {
+      if (!ready) {
+        persistFailStreak += 1;
+        if (persistFailStreak === 1 || persistFailStreak % 20 === 0) {
+          console.warn('[hub] Upstash Redis에 저장하지 못했습니다. (서버는 계속 동작합니다)');
+        }
+        return false;
+      }
+      return redis.pipeline([
+        ['SET', REDIS_CLASSES_KEY, JSON.stringify(classStoreData())],
+        ['SET', REDIS_CLASS_STATS_KEY, JSON.stringify(classStatsData())]
+      ]).then(function () {
+        if (persistFailStreak) console.log('[hub] Upstash Redis 저장이 다시 성공했습니다.');
+        persistFailStreak = 0;
+        return true;
+      }).catch(function (err) {
+        persistFailStreak += 1;
+        if (persistFailStreak === 1 || persistFailStreak % 20 === 0) {
+          console.warn('[hub] Upstash Redis에 저장하지 못했습니다. (서버는 계속 동작합니다)', err.message);
+        }
+        return false;
+      });
+    });
+  }
+
+  /** 반 목록·반별 기록 저장을 예약합니다. (150ms 안의 변경은 한 번에 보냄) */
+  function schedulePersist() {
+    if (!redis.enabled) return;
+    if (persistTimer) return;
+    persistTimer = setTimeout(function () {
+      persistTimer = null;
+      persistChain = persistChain.then(persistNow, persistNow);
+    }, 150);
+    if (persistTimer.unref) persistTimer.unref();
+  }
+
+  /** 예약된 저장을 지금 바로 보내고 기다립니다. (서버 종료·테스트용) */
+  function flushPersistence() {
+    if (!redis.enabled) return Promise.resolve(false);
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+    }
+    persistChain = persistChain.then(persistNow, persistNow);
+    return persistChain;
+  }
+
+  /** 반 목록을 파일과 Upstash(설정된 경우)에 함께 남깁니다. */
+  function saveClassStore() {
+    classStoreSave();
+    schedulePersist();
   }
 
   /** 반 하나에 1~6모둠 방을 만듭니다. 이미 있으면 그대로 둡니다. */
@@ -928,7 +1253,7 @@ function createHub(options) {
     const cls = makeClass({ code: code, name: name, pin: pin, pinned: true });
     classes.set(code, cls);
     initClassRooms(code);
-    classStoreSave();
+    saveClassStore();
     ws.meta.classCreates = (ws.meta.classCreates || 0) + 1;
 
     ws.meta.teacher = true;
@@ -1232,7 +1557,13 @@ function createHub(options) {
     }
     if (pathname === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ ok: true, rooms: rooms.size, classes: classes.size, uptime: Math.round(process.uptime()) }));
+      res.end(JSON.stringify({
+        ok: true,
+        rooms: rooms.size,
+        classes: classes.size,
+        persistence: settings.persistence,
+        uptime: Math.round(process.uptime())
+      }));
       return;
     }
     // 우리 반 코드가 살아 있는지 한눈에 확인할 때 쓰는 읽기 전용 API (PIN 정보는 내보내지 않음)
@@ -1317,17 +1648,27 @@ function createHub(options) {
   if (heartbeat.unref) heartbeat.unref();
 
   initRooms();
+  // 반이 파일에서 복원된 뒤, Upstash Redis 에 저장된 반 목록·기록도 비동기로 불러옵니다.
+  // 실패해도 서버는 그대로 뜨고 나중에 저장할 때 다시 시도합니다.
+  const readyPromise = hydrateFromRedis();
 
   /* ---------------- 공개 API ---------------- */
 
+  /** Upstash 복원이 끝날 때까지 기다립니다. (설정이 없거나 실패하면 바로 false) */
+  function ready() {
+    return readyPromise;
+  }
+
   function start(port, host) {
-    const listenPort = port === undefined ? Number(process.env.PORT || 3000) : port;
-    const listenHost = host || process.env.HOST || '0.0.0.0';
-    return new Promise(function (resolve, reject) {
-      httpServer.once('error', reject);
-      httpServer.listen(listenPort, listenHost, function () {
-        const actual = httpServer.address();
-        resolve({ port: actual.port, host: listenHost, urls: lanUrls(actual.port) });
+    return ready().then(function () {
+      const listenPort = port === undefined ? Number(process.env.PORT || 3000) : port;
+      const listenHost = host || process.env.HOST || '0.0.0.0';
+      return new Promise(function (resolve, reject) {
+        httpServer.once('error', reject);
+        httpServer.listen(listenPort, listenHost, function () {
+          const actual = httpServer.address();
+          resolve({ port: actual.port, host: listenHost, urls: lanUrls(actual.port) });
+        });
       });
     });
   }
@@ -1336,12 +1677,15 @@ function createHub(options) {
     clearInterval(heartbeat);
     if (overviewTimer) clearTimeout(overviewTimer);
     for (const room of rooms.values()) stopBotLoop(room);
-    return new Promise(function (resolve) {
-      for (const client of wss.clients) {
-        try { client.terminate(); } catch (err) { /* ignore */ }
-      }
-      wss.close(function () {
-        httpServer.close(function () { resolve(); });
+    // 프로세스가 내려가기 전에 저장 대기 중인 반 목록·기록을 보냅니다. (Redis 가 느려도 최대 5초)
+    return flushPersistence().then(function () {
+      return new Promise(function (resolve) {
+        for (const client of wss.clients) {
+          try { client.terminate(); } catch (err) { /* ignore */ }
+        }
+        wss.close(function () {
+          httpServer.close(function () { resolve(); });
+        });
       });
     });
   }
@@ -1353,7 +1697,10 @@ function createHub(options) {
     classes: classes,
     settings: settings,
     start: start,
+    ready: ready,
     close: close,
+    redis: redis,
+    flushPersistence: flushPersistence,
     roomsOverview: roomsOverview,
     getRoom: getRoom,
     getClass: getClass,
@@ -1392,6 +1739,11 @@ if (require.main === module) {
     console.log('');
     console.log('  첫 화면   :  ' + (info.urls[0] || 'http://localhost:' + port) + '  → [👩‍🏫 우리 반 만들기]');
     console.log('  교사 관전 :  사이트 첫 화면 또는 우리 반 링크 → [👩‍🏫 선생님 모드] (교사 PIN 필요)');
+    console.log('  영구 저장 :  ' + (hub.settings.persistence === 'upstash'
+      ? 'Upstash Redis (반 목록 + 반별 랭킹)'
+      : hub.settings.persistence === 'file'
+        ? 'data/classes.json (반 목록만, 랭킹은 메모리)'
+        : '메모리만 (서버를 끄면 초기화)'));
     console.log('  종료하려면 Ctrl+C');
     console.log('');
   }).catch(function (err) {
