@@ -616,13 +616,18 @@
 
   const OC_LABEL = { skip: '⏭', reverse: '🔄', draw2: '+2', wild: '🌈' };
 
+  const OC_ARIA = { skip: '점프', reverse: '방향전환', draw2: '+2 공격', wild: '색 바꾸기' };
+  const OC_COLOR_NAME = { red: '빨강', blue: '파랑', yellow: '노랑', green: '초록' };
+
   function ocCardHtml(card, opts) {
     const o = opts || {};
     let cls = 'mg-oc-card ' + (card.color ? 'c-' + card.color : 'is-wild');
     if (o.playable) cls += ' is-playable';
     if (o.small) cls += ' is-small';
     const label = card.type === 'number' ? card.value : (OC_LABEL[card.type] || '?');
-    const name = card.type === 'number' ? (card.color + ' ' + card.value) : card.type;
+    const name = card.type === 'number'
+      ? ((OC_COLOR_NAME[card.color] || '') + ' ' + card.value).trim()
+      : (OC_ARIA[card.type] || card.type);
     if (o.static) { return '<span class="' + cls + '" aria-label="' + name + '">' + label + '</span>'; }
     return '<button class="' + cls + '" data-action="mini.ocPlay" data-card="' + card.id + '" aria-label="' + name + '"' +
       (o.playable ? '' : ' disabled') + '>' + label + '</button>';

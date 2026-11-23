@@ -2842,11 +2842,11 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
 .mg-dots-box { position: absolute; border-radius: 6px; background: rgba(242, 181, 67, 0.08); display: flex; align-items: center; justify-content: center; z-index: 1; }
 .mg-dots-box.is-owned { opacity: .85; }
 .mg-dots-owner { font-size: 9px; font-weight: 900; color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,.35); padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%; }
-.mg-dots-line { position: absolute; border: none; padding: 0; background: #e8d6bd; border-radius: 999px; z-index: 2; transform: translate(-50%, -50%); }
+.mg-dots-line { position: absolute; border: none; padding: 0; background: rgba(176, 128, 72, 0.16); border-radius: 999px; z-index: 2; transform: translate(-50%, -50%); }
 .mg-dots-line.h { width: 19.1%; height: 7px; }
 .mg-dots-line.v { width: 7px; height: 19.1%; }
 .mg-dots-line:disabled { opacity: 1; cursor: default; }
-.mg-dots-line:not(:disabled):hover { background: #f2b543; }
+.mg-dots-line:not(:disabled):hover { background: #f2b543; box-shadow: 0 0 0 3px rgba(242, 181, 67, 0.25); }
 .mg-dots-line.is-owned { background: #b08048; }
 .mg-dots-scores { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .mg-dots-score { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; background: #fff8ec; border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; }

@@ -244,13 +244,17 @@ test('1인용 퍼즐: 2048 보드가 그려지고 방향키로 숫자가 움직�
     window.location.hash = '#/puzzle/2048';
     await waitFor(function () { return window.document.querySelectorAll('.pz-tile').length === 16; }, '2048 보드');
     assert.ok(window.document.querySelector('.pz-scoreboard'));
-    const before = window.document.querySelector('.pz-2048-grid').textContent;
-    // 실제 키 이벤트로 이동
-    const ev = new window.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true });
-    window.document.body.dispatchEvent(ev);
-    await sleep(120);
-    const after = window.document.querySelector('.pz-2048-grid').textContent;
-    assert.notEqual(before, after, '왼쪽으로 밀면 판이 바뀐다');
+    // 실제 키 이벤트로 이동 (처음 숫자가 이미 왼쪽에 붙어 있으면 왼쪽 이동은 판이 그대로일 수 있어,
+    // 판이 바뀌는 방향이 나올 때까지 네 방향을 차례로 눌러 확인합니다.)
+    let moved = false;
+    for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowDown', 'ArrowRight']) {
+      const before = window.document.querySelector('.pz-2048-grid').textContent;
+      window.document.body.dispatchEvent(new window.KeyboardEvent('keydown', { key: key, bubbles: true }));
+      await sleep(120);
+      const after = window.document.querySelector('.pz-2048-grid').textContent;
+      if (before !== after) { moved = true; break; }
+    }
+    assert.ok(moved, '방향키를 누르면 판이 바뀐다');
 
     window.location.hash = '#/puzzle/pairs';
     await waitFor(function () { return window.document.querySelectorAll('.pz-card').length === 16; }, '짝맞추기');
