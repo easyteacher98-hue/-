@@ -277,7 +277,7 @@
       myRoomBanner() +
 
       '<div class="panel number-panel" style="margin-bottom:16px">' +
-        '<div class="row" style="gap:14px;align-items:flex-end;flex-wrap:wrap">' +
+        '<div class="row" style="gap:14px;align-items:flex-start;flex-wrap:wrap">' +
           '<label class="field" style="flex:0 0 auto;min-width:170px">내 출석번호 (1~99)' +
             '<span class="row" style="gap:8px;flex-wrap:nowrap;align-items:center">' +
               '<span id="my-avatar-preview">' + avatar({ number: BG.state.number, name: myLabel() }, 'sm') + '</span>' +
@@ -292,7 +292,7 @@
               'placeholder="예: 김민수" value="' + esc(BG.state.name || '') + '">' +
             '<span class="hint">번호와 이름이 함께 보여요: <b id="my-name-preview">' + esc(namePreviewLabel) + '</b></span>' +
           '</label>' +
-          '<button class="btn btn-ghost" data-action="hg.rules">📖 게임 규칙 보기</button>' +
+          '<button class="btn btn-ghost" data-action="hg.rules" style="align-self:flex-end">📖 게임 규칙 보기</button>' +
         '</div>' +
         '<span class="hint" style="display:block;margin-top:10px">친구마다 다른 번호를 써 주세요. 이름을 비워 두면 번호만 보여요.</span>' +
         '<span class="hint" style="display:block">' + (validNumber(BG.state.number) ? '내 기록: ' + myRecordLine() : '번호를 넣으면 내 승수·포인트가 보여요.') + '</span>' +
