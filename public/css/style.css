@@ -2961,7 +2961,7 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
   .screen-head { margin-bottom: 22px; }
 
   /* ---------- 3) 첫 화면 · 우리 반 포털 ---------- */
-  .portal-hero { padding: 44px 32px 38px; border-radius: 38px; }
+  .portal-hero { padding: 34px 32px 30px; border-radius: 38px; }
   .portal-kicker { font-size: 14px; padding: 7px 16px; }
   .portal-title { font-size: clamp(46px, 5vw, 68px); margin: 16px 0 12px; }
   .portal-sub { font-size: 18px; }
