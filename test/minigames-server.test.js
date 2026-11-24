@@ -86,7 +86,7 @@ test('숫자 줄세우기: 모둠 방에서 봇과 시작하고, 같은 숫자�
       return m.t === 'room' && m.room.gameId === 'streams' && m.room.status === 'playing';
     });
     const game = playing.room.game;
-    assert.ok(game.value >= 1 && game.value <= 30);
+    assert.ok(game.value === '★' || (game.value >= 1 && game.value <= 30), '숫자 타일 또는 조커(★)');
     assert.ok(game.youSlots.length > 0, '놓을 수 있는 칸이 있어야 한다');
     assert.equal(game.players.length, 2);
     assert.ok(game.players.some(function (p) { return p.isBot; }));

@@ -36,43 +36,104 @@ test('숫자 줄세우기: 끊기지 않은 가장 긴 구간이 점수', functi
   assert.equal(Streams.filledCount(track), 4);
 });
 
-test('숫자 줄세우기: 모두 같은 숫자를 동시에 놓고, 30장을 다 쓰면 끝난다', function () {
+test('숫자 줄세우기: 1~30 타일 + 조커 ★ 2장 중 20장을 뽑아 20차례 진행한다', function () {
+  const pool = Streams.makePool();
+  assert.equal(pool.length, 32, '1~30 + 조커 2장');
+  assert.equal(pool.filter(function (v) { return v === Streams.JOKER; }).length, 2);
+
   const game = new Streams.Game([
     { id: 'a', name: '가' },
     { id: 'b', name: '나', isBot: true }
   ], { seed: 11 });
   assert.equal(game.status, 'playing');
-  assert.ok(game.value >= 1 && game.value <= 30);
-  assert.equal(game.deck.length, 29);
+  assert.equal(game.roundsTotal, 20);
+  assert.equal(game.round, 1);
+  assert.equal(game.deck.length, 19, '20장 중 한 장을 이미 공개');
+  assert.ok(game.value === Streams.JOKER || (game.value >= 1 && game.value <= 30));
 
-  const firstValue = game.value;
   const a = game.playerById('a');
-  const slots = Streams.validSlots(a.track, firstValue);
+  const slots = Streams.validSlots(a.track, game.value);
   assert.ok(slots.length > 0);
   assert.equal(game.place('nobody', slots[0]).reason, 'unknown_player', '모르는 사람은 놓을 수 없음');
   const result = game.place('a', slots[slots.length - 1]);
   assert.equal(result.ok, true);
-  assert.equal(a.track[slots[slots.length - 1]], firstValue);
+  assert.equal(a.track[slots[slots.length - 1]], game.value);
+});
+
+test('숫자 줄세우기: 조커(★)는 어디에나 놓이고 앞뒤 숫자를 이어 준다', function () {
+  const track = new Array(20).fill(null);
+  track[5] = 10;
+  track[6] = 20;
+  assert.equal(Streams.canPlaceAt(track, 0, Streams.JOKER), true, '맨 왼쪽에도 놓을 수 있음');
+  assert.equal(Streams.canPlaceAt(track, 5, Streams.JOKER), false, '이미 채워진 칸은 안 됨');
+  assert.equal(Streams.canPlaceAt(track, 7, Streams.JOKER), true, '오른쪽에도 놓을 수 있음');
+
+  // 조커가 끼어 있으면 그 너머의 숫자도 자유롭게 놓을 수 있다
+  const withJoker = new Array(20).fill(null);
+  withJoker[5] = Streams.JOKER;
+  assert.equal(Streams.canPlaceAt(withJoker, 3, 7), true);
+  assert.equal(Streams.canPlaceAt(withJoker, 8, 12), true);
+
+  // 조커는 줄을 끊지 않고 이어 준다
+  const run = new Array(20).fill(null);
+  run[0] = 5;
+  run[1] = 9;
+  run[2] = 3;
+  run[3] = 4;
+  run[4] = Streams.JOKER;
+  run[5] = 12;
+  assert.equal(Streams.longestRun(run), 4, '3·4·★·12 가 이어진 한 구간');
+});
+
+test('숫자 줄세우기: 오름차순 칸이 없으면 빈칸에 강제로 놓고, 그 자리에서 줄이 끊긴다', function () {
+  const game = new Streams.Game([{ id: 'a', name: '가' }], { seed: 5 });
+  const a = game.playerById('a');
+  for (let i = 0; i < 10; i++) a.track[i] = 11 + i; // 0~9번 칸: 11~20
+  a.filled = Streams.filledCount(a.track);
+
+  // 5는 11보다 작아서 왼쪽에 놓을 자리가 없다 → 강제 배치
+  game.value = 5;
+  game.waiting = ['a'];
+  const state = game.stateFor('a');
+  assert.equal(state.youForced, true);
+  assert.equal(state.youSlots.length, 10, '남은 빈칸 10곳 모두 고를 수 있다');
+  assert.equal(game.skip('a').reason, 'must_place', '건너뛰기는 없음');
+  assert.equal(game.place('a', 5).ok, false, '이미 채워진 칸은 안 됨');
+
+  const forced = game.place('a', 15);
+  assert.equal(forced.ok, true);
+  assert.equal(forced.forced, true);
+  assert.equal(a.track[15], 5);
+  assert.equal(Streams.longestRun(a.track), 10, '끊긴 자리 앞의 11~20 구간만 남는다');
+});
+
+test('숫자 줄세우기: 20칸을 모두 채울 때까지 끝나지 않고, 다 채우면 점수를 매긴다', function () {
+  const game = new Streams.Game([
+    { id: 'a', name: '가' },
+    { id: 'b', name: '나', isBot: true }
+  ], { seed: 11 });
 
   let guard = 0;
   while (game.status === 'playing' && guard < 500) {
     guard += 1;
     const waiting = game.waiting.slice();
-    if (!waiting.length) break;
+    assert.ok(waiting.length > 0, '매 차례 모두가 반드시 한 칸씩 놓는다');
     for (const id of waiting) {
       const player = game.playerById(id);
       const options = Streams.validSlots(player.track, game.value);
-      if (!options.length) {
-        game.skip(id);
-      } else {
-        const r = game.place(id, options[Math.floor(options.length / 2)]);
-        assert.equal(r.ok, true);
-      }
+      const empties = Streams.emptySlots(player.track);
+      assert.ok(empties.length > 0);
+      const slot = options.length ? options[Math.floor(options.length / 2)] : empties[empties.length - 1];
+      const r = game.place(id, slot);
+      assert.equal(r.ok, true);
     }
   }
   assert.equal(game.status, 'finished');
-  assert.equal(game.round, 30);
+  assert.equal(game.round, 20, '20번째 타일까지 진행');
   assert.equal(game.deck.length, 0);
+  game.players.forEach(function (p) {
+    assert.equal(p.filled, 20, '모두 20칸을 채운다');
+  });
   const ranking = game.ranking();
   assert.equal(ranking[0].rank, 1);
   assert.ok(ranking[0].score >= ranking[1].score);

@@ -143,12 +143,12 @@
 
     if (tile.type === BM.TILE_TYPES.CITY) {
       ctx.fillStyle = '#141d2c';
-      ctx.font = '700 ' + (name.length >= 4 ? 46 : name.length === 3 ? 54 : 62) + 'px "Jua", "Gowun Dodum", "Malgun Gothic", sans-serif';
+      ctx.font = '700 ' + (name.length >= 4 ? 46 : name.length === 3 ? 54 : 62) + 'px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
       ctx.fillText(name, S / 2, 96);
 
       // 가격 (진한 알약)
       const priceText = BM.shortMoney(tile.price);
-      ctx.font = '700 34px "Gowun Dodum", "Malgun Gothic", sans-serif';
+      ctx.font = '700 34px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
       const w = ctx.measureText(priceText).width + 34;
       ctx.fillStyle = '#101a2b';
       roundedRect(ctx, S / 2 - w / 2, 132, w, 44, 22);
@@ -158,7 +158,7 @@
 
       // 건물 단계
       const levelText = level === 3 ? '★ 호텔 ★' : (BM.BUILD_NAMES[level] || '땅');
-      ctx.font = '700 29px "Gowun Dodum", "Malgun Gothic", sans-serif';
+      ctx.font = '700 29px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
       ctx.fillStyle = level === 3 ? '#b57a12' : level > 0 ? '#256b47' : '#8d8172';
       ctx.fillText(levelText, S / 2, 196);
 
@@ -170,20 +170,20 @@
         roundedRect(ctx, S / 2 - 56, 208, 112, 28, 14);
         ctx.fill();
         ctx.fillStyle = '#fff';
-        ctx.font = '700 21px "Jua", "Gowun Dodum", sans-serif';
+        ctx.font = '700 21px "IBM Plex Sans KR", sans-serif';
         ctx.fillText(label, S / 2, 223);
       } else {
         ctx.fillStyle = '#7d6a56';
-        ctx.font = '700 19px "Gowun Dodum", sans-serif';
+        ctx.font = '700 19px "IBM Plex Sans KR", sans-serif';
         ctx.fillText('매입 가능', S / 2, 216);
       }
     } else {
       ctx.fillStyle = '#141d2c';
-      ctx.font = '700 ' + (name.length >= 4 ? 42 : 50) + 'px "Jua", "Gowun Dodum", "Malgun Gothic", sans-serif';
+      ctx.font = '700 ' + (name.length >= 4 ? 42 : 50) + 'px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
       ctx.fillText(name, S / 2, 158);
       const desc = String(tile.desc || '');
       if (desc) {
-        ctx.font = '600 22px "Gowun Dodum", "Malgun Gothic", sans-serif';
+        ctx.font = '600 22px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
         ctx.fillStyle = '#6d5c49';
         ctx.fillText(desc, S / 2, 198);
       }
@@ -193,27 +193,27 @@
       else if (tile.type === BM.TILE_TYPES.TAX) {
         ctx.fillStyle = '#b1553a';
         ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 40px "Jua", sans-serif'; ctx.fillText('₩', 128, iconY + 2);
+        ctx.fillStyle = '#fff'; ctx.font = '700 40px "IBM Plex Sans KR", sans-serif'; ctx.fillText('₩', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.BONUS) {
         ctx.fillStyle = '#b98314';
         ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 46px "Jua", sans-serif'; ctx.fillText('+', 128, iconY + 2);
+        ctx.fillStyle = '#fff'; ctx.font = '700 46px "IBM Plex Sans KR", sans-serif'; ctx.fillText('+', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.START) {
         ctx.fillStyle = '#c2402c';
         ctx.beginPath(); ctx.arc(128, iconY, 34, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 28px "Jua", sans-serif'; ctx.fillText('GO', 128, iconY + 2);
+        ctx.fillStyle = '#fff'; ctx.font = '700 28px "IBM Plex Sans KR", sans-serif'; ctx.fillText('GO', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.ISLAND) {
         ctx.fillStyle = '#2e7f96';
         ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 26px "Jua", sans-serif'; ctx.fillText('ISLE', 128, iconY + 2);
+        ctx.fillStyle = '#fff'; ctx.font = '700 26px "IBM Plex Sans KR", sans-serif'; ctx.fillText('ISLE', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.TRAVEL) {
         ctx.fillStyle = '#6247a8';
         ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 26px "Jua", sans-serif'; ctx.fillText('AIR', 128, iconY + 2);
+        ctx.fillStyle = '#fff'; ctx.font = '700 26px "IBM Plex Sans KR", sans-serif'; ctx.fillText('AIR', 128, iconY + 2);
       } else if (tile.type === BM.TILE_TYPES.PARK) {
         ctx.fillStyle = '#2e7d5b';
         ctx.beginPath(); ctx.arc(128, iconY, 32, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 32px "Jua", sans-serif'; ctx.fillText('P', 128, iconY + 2);
+        ctx.fillStyle = '#fff'; ctx.font = '700 32px "IBM Plex Sans KR", sans-serif'; ctx.fillText('P', 128, iconY + 2);
       }
     }
 
@@ -260,10 +260,10 @@
     ctx.textBaseline = 'middle';
     const title = label || '전국여행 마블';
     let titleSize = 72;
-    ctx.font = '700 ' + titleSize + 'px "Jua", "Gowun Dodum", sans-serif';
+    ctx.font = '700 ' + titleSize + 'px "IBM Plex Sans KR", sans-serif';
     while (titleSize > 26 && ctx.measureText(title).width > S * 0.72) {
       titleSize -= 4;
-      ctx.font = '700 ' + titleSize + 'px "Jua", "Gowun Dodum", sans-serif';
+      ctx.font = '700 ' + titleSize + 'px "IBM Plex Sans KR", sans-serif';
     }
     ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
     ctx.shadowBlur = 12;
@@ -275,10 +275,10 @@
     ctx.fillRect(S / 2 - 90, S / 2 + 10, 180, 3);
 
     ctx.fillStyle = '#cfe0ff';
-    ctx.font = '600 26px "Gowun Dodum", sans-serif';
+    ctx.font = '600 26px "IBM Plex Sans KR", sans-serif';
     ctx.fillText('3D BOARD GAME', S / 2, S / 2 + 44);
     ctx.fillStyle = 'rgba(207, 224, 255, 0.62)';
-    ctx.font = '500 21px "Gowun Dodum", sans-serif';
+    ctx.font = '500 21px "IBM Plex Sans KR", sans-serif';
     ctx.fillText('보드게임천국', S / 2, S / 2 + 82);
 
     // 나침반
@@ -333,7 +333,7 @@
     roundedRect(ctx, 20, 26, W - 40, 76, 34);
     ctx.fill();
     ctx.fillStyle = color || '#fff';
-    ctx.font = '700 46px "Jua", "Gowun Dodum", "Malgun Gothic", sans-serif';
+    ctx.font = '700 46px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, W / 2, 66);

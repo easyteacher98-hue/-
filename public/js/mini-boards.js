@@ -44,15 +44,27 @@
   function streamsBoard(state, ctx) {
     const isMyTurn = state.status === 'playing' && state.waiting.indexOf(state.youId) !== -1;
     const value = state.value;
+    const joker = !!state.joker || value === '★';
+    const valueLabel = value === null ? '?' : (joker ? '★' : value);
+    const total = state.roundsTotal || 20;
+    const forced = !!state.youForced;
+    let turnText;
+    if (isMyTurn) {
+      if (joker) turnText = '내 차례! <b>★ 조커</b>는 어디에나 놓을 수 있어요.';
+      else if (forced) turnText = '내 차례! <b>' + value + '</b> — 오름차순에 맞는 칸이 없어요. 남은 빈칸 아무 곳이나 누르세요.';
+      else turnText = '내 차례! <b>' + value + '</b>' + josaOf(value) + ' 놓을 칸을 누르세요.';
+    } else if (joker) {
+      turnText = '<b>★ 조커</b> — 다른 친구가 놓는 중…';
+    } else {
+      turnText = '<b>' + value + '</b> — 다른 친구가 놓는 중…';
+    }
     const banner =
       '<div class="mg-turn-bar ' + (isMyTurn ? 'is-me' : '') + '">' +
         (state.status === 'finished'
-          ? '<span class="mg-turn-text">🏁 게임 끝! 가장 긴 줄이 우승입니다.</span>'
-          : '<span class="mg-num-tile">' + (value === null ? '?' : value) + '</span>' +
-            '<span class="mg-turn-text">' + (isMyTurn
-              ? '내 차례! <b>' + value + '</b>' + josaOf(value) + ' 놓을 칸을 누르세요.'
-              : '<b>' + value + '</b> — 다른 친구가 놓는 중…') + '</span>' +
-            '<span class="mg-round-chip">' + state.round + '번째 숫자 · 남은 ' + state.remaining + '장</span>') +
+          ? '<span class="mg-turn-text">🏁 게임 끝! 20칸을 다 채웠어요. 가장 긴 줄이 우승입니다.</span>'
+          : '<span class="mg-num-tile' + (joker ? ' is-joker' : '') + '">' + valueLabel + '</span>' +
+            '<span class="mg-turn-text">' + turnText + '</span>' +
+            '<span class="mg-round-chip">' + state.round + '/' + total + '번째 타일 · 남은 ' + state.remaining + '장</span>') +
       '</div>';
 
     const boards = state.players.map(function (p) {
@@ -60,22 +72,29 @@
       const slots = [];
       for (let i = 0; i < state.trackSize; i++) {
         const v = p.track[i];
-        const canPlace = mine && isMyTurn && v === null && state.youSlots.indexOf(i) !== -1;
         const filled = v !== null && v !== undefined;
+        const canPlace = mine && isMyTurn && !filled && state.youSlots.indexOf(i) !== -1;
+        const isJokerSlot = filled && v === '★';
         slots.push(
           '<' + (canPlace ? 'button' : 'span') + ' class="mg-slot' + (filled ? ' filled' : '') +
-            (canPlace ? ' can-place' : '') + (i === p.lastSlot ? ' just-placed' : '') + '"' +
-            (canPlace ? ' data-action="mini.place" data-slot="' + i + '" aria-label="' + (i + 1) + '번째 칸에 ' + value + ' 놓기"' : '') +
-            '>' + (filled ? v : '<i>' + (i + 1) + '</i>') + '</' + (canPlace ? 'button' : 'span') + '>'
+            (isJokerSlot ? ' joker-filled' : '') +
+            (canPlace ? ' can-place' : '') + (canPlace && forced ? ' forced' : '') +
+            (i === p.lastSlot ? ' just-placed' : '') + '"' +
+            (canPlace ? ' data-action="mini.place" data-slot="' + i + '" aria-label="' + (i + 1) + '번째 칸에 ' + valueLabel + ' 놓기"' : '') +
+            '>' + (filled ? (isJokerSlot ? '★' : v) : '<i>' + (i + 1) + '</i>') + '</' + (canPlace ? 'button' : 'span') + '>'
         );
+      }
+      let hint = '';
+      if (mine && isMyTurn) {
+        hint = forced && !joker
+          ? '<div class="mg-track-hint is-forced">오름차순에 맞는 칸이 없어요. 반짝이는 빈칸 아무 곳이나 누르면 그 자리에서 줄이 끊겨요.</div>'
+          : '<div class="mg-track-hint">반짝이는 칸을 누르면 됩니다. (왼쪽은 작은 수, 오른쪽은 큰 수)</div>';
       }
       return '<div class="mg-track-card' + (mine ? ' is-me' : '') + '">' +
         '<div class="mg-track-head">' + playerHead(p, { badge: '<b>' + p.score + '</b>칸' }) +
-          '<span class="mg-track-sub">' + p.filled + '/20 · 버림 ' + p.discarded + '</span></div>' +
-        '<div class="mg-track">' + slots.join('') + '</div>' +
-        (mine && isMyTurn
-          ? '<div class="mg-track-hint">반짝이는 칸을 누르면 됩니다. (왼쪽은 작은 수, 오른쪽은 큰 수)</div>'
-          : '') +
+          '<span class="mg-track-sub">' + p.filled + '/' + state.trackSize +
+            (p.forcedTurns ? ' · 강제 ' + p.forcedTurns : '') + '</span></div>' +
+        '<div class="mg-track">' + slots.join('') + '</div>' + hint +
       '</div>';
     }).join('');
 
