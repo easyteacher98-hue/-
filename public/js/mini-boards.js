@@ -47,12 +47,10 @@
     const joker = !!state.joker || value === '★';
     const valueLabel = value === null ? '?' : (joker ? '★' : value);
     const total = state.roundsTotal || 20;
-    const forced = !!state.youForced;
     let turnText;
     if (isMyTurn) {
-      if (joker) turnText = '내 차례! <b>★ 조커</b>는 어디에나 놓을 수 있어요.';
-      else if (forced) turnText = '내 차례! <b>' + value + '</b> — 오름차순에 맞는 칸이 없어요. 남은 빈칸 아무 곳이나 누르세요.';
-      else turnText = '내 차례! <b>' + value + '</b>' + josaOf(value) + ' 놓을 칸을 누르세요.';
+      if (joker) turnText = '내 차례! <b>★ 조커</b>를 놓을 빈 칸을 누르세요.';
+      else turnText = '내 차례! <b>' + value + '</b>' + josaOf(value) + ' 놓을 빈 칸을 누르세요.';
     } else if (joker) {
       turnText = '<b>★ 조커</b> — 다른 친구가 놓는 중…';
     } else {
@@ -73,12 +71,12 @@
       for (let i = 0; i < state.trackSize; i++) {
         const v = p.track[i];
         const filled = v !== null && v !== undefined;
-        const canPlace = mine && isMyTurn && !filled && state.youSlots.indexOf(i) !== -1;
+        const canPlace = mine && isMyTurn && !filled;
         const isJokerSlot = filled && v === '★';
         slots.push(
           '<' + (canPlace ? 'button' : 'span') + ' class="mg-slot' + (filled ? ' filled' : '') +
             (isJokerSlot ? ' joker-filled' : '') +
-            (canPlace ? ' can-place' : '') + (canPlace && forced ? ' forced' : '') +
+            (canPlace ? ' can-place' : '') +
             (i === p.lastSlot ? ' just-placed' : '') + '"' +
             (canPlace ? ' data-action="mini.place" data-slot="' + i + '" aria-label="' + (i + 1) + '번째 칸에 ' + valueLabel + ' 놓기"' : '') +
             '>' + (filled ? (isJokerSlot ? '★' : v) : '<i>' + (i + 1) + '</i>') + '</' + (canPlace ? 'button' : 'span') + '>'
@@ -86,14 +84,11 @@
       }
       let hint = '';
       if (mine && isMyTurn) {
-        hint = forced && !joker
-          ? '<div class="mg-track-hint is-forced">오름차순에 맞는 칸이 없어요. 반짝이는 빈칸 아무 곳이나 누르면 그 자리에서 줄이 끊겨요.</div>'
-          : '<div class="mg-track-hint">반짝이는 칸을 누르면 됩니다. (왼쪽은 작은 수, 오른쪽은 큰 수)</div>';
+        hint = '<div class="mg-track-hint">빈 칸을 눌러 배치하세요.</div>';
       }
       return '<div class="mg-track-card' + (mine ? ' is-me' : '') + '">' +
         '<div class="mg-track-head">' + playerHead(p, { badge: '<b>' + p.score + '</b>칸' }) +
-          '<span class="mg-track-sub">' + p.filled + '/' + state.trackSize +
-            (p.forcedTurns ? ' · 강제 ' + p.forcedTurns : '') + '</span></div>' +
+          '<span class="mg-track-sub">' + p.filled + '/' + state.trackSize + '</span></div>' +
         '<div class="mg-track">' + slots.join('') + '</div>' + hint +
       '</div>';
     }).join('');

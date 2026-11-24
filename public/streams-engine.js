@@ -8,7 +8,8 @@
  *   - 20번의 차례 동안 모두가 동시에, 자기 20칸 트랙의 빈칸에 한 장씩 놓습니다.
  *   - 트랙은 왼쪽에서 오른쪽으로 커지는 것이 이상적입니다. (작은 수는 왼쪽, 큰 수는 오른쪽)
  *   - 조커(★)는 어떤 숫자 사이에도 들어가고, 앞뒤 숫자가 이어지도록 만들어 줍니다.
- *   - 오름차순에 맞는 칸이 없어도 반드시 빈칸 하나에 놓아야 합니다. (그 자리에서 줄이 끊깁니다)
+ *   - 이미 타일이 있는 칸만 빼고, 빈칸 20칸 어디에나 내 마음대로 놓을 수 있습니다.
+ *     (오름차순이 되지 않는 칸도 막지 않습니다. 그 자리에서 줄이 끊길 뿐입니다)
  *   - 20칸을 모두 채우면 끝나고, '왼쪽에서 오른쪽으로 커지며 끊기지 않고 이어진 가장 긴 구간'이 점수입니다.
  */
 (function (root, factory) {
@@ -116,7 +117,10 @@
     return n;
   }
 
-  /** 이 칸에 value 를 놓아도 왼쪽은 모두 작고 오른쪽은 모두 커지는지 (조커 칸은 통과) */
+  /**
+   * 이 칸에 value 를 놓으면 왼쪽은 모두 작고 오른쪽은 모두 커지는지 (조커 칸은 통과).
+   * 규칙을 막는 데 쓰지 않고, 봇이 '오름차순이 되는 칸'을 골라 놓을 때 참고하는 도우미입니다.
+   */
   function canPlaceAt(track, slot, value) {
     if (slot < 0 || slot >= track.length) return false;
     if (isFilled(track[slot])) return false;
@@ -144,7 +148,7 @@
     return out;
   }
 
-  /** 빈칸 목록 (오름차순에 맞는 칸이 없을 때 강제로 놓을 수 있는 칸) */
+  /** 빈칸 목록 — 어디에나 자유롭게 놓을 수 있는 칸 */
   function emptySlots(track) {
     const out = [];
     for (let i = 0; i < track.length; i++) if (!isFilled(track[i])) out.push(i);
@@ -173,8 +177,7 @@
         track: new Array(TRACK).fill(null),
         score: 0,
         filled: 0,
-        lastSlot: null,
-        forcedTurns: 0
+        lastSlot: null
       };
     });
     // 1~30 숫자 + ★ 2장을 섞어 그중 20장만 사용합니다. (한 판 = 20차례)
@@ -182,7 +185,6 @@
     this.round = 0;
     this.value = null;
     this.waiting = [];
-    this.forced = {};
     this.status = 'playing';
     this.finishReason = null;
     this.seq = 0;
@@ -211,18 +213,15 @@
     this.value = this.deck.pop();
     this.round += 1;
     this.waiting = [];
-    this.forced = {};
     const value = this.value;
     const self = this;
     this.players.forEach(function (player) {
       if (filledCount(player.track) >= TRACK) return;
       player.lastSlot = null;
-      // 오름차순에 맞는 칸이 없으면 빈칸 아무 곳에나 강제로 놓습니다.
-      if (!validSlots(player.track, value).length) self.forced[player.id] = true;
       self.waiting.push(player.id);
     });
     this.pushLog('🎲 ' + this.round + '번째 타일: ' + displayValue(value) +
-      (isJoker(value) ? ' — 조커는 어디에나 놓을 수 있어요!' : ' — 놓을 칸을 골라 주세요.'));
+      (isJoker(value) ? ' — 조커는 어디에나 놓을 수 있어요!' : ' — 빈칸 아무 곳에나 놓아 보세요.'));
   };
 
   Game.prototype.advanceIfReady = function () {
@@ -234,7 +233,7 @@
     this.nextRound();
   };
 
-  /** 지금 공개된 타일을 슬롯에 놓습니다. (오름차순 칸이 없으면 빈칸 아무 곳이나) */
+  /** 지금 공개된 타일을 빈칸 아무 곳에나 놓습니다. (이미 찬 칸만 막습니다) */
   Game.prototype.place = function (playerId, slot) {
     if (this.status !== 'playing') return { ok: false, reason: 'not_playing' };
     const player = this.playerById(playerId);
@@ -246,24 +245,18 @@
     if (!Number.isInteger(index) || index < 0 || index >= TRACK) return { ok: false, reason: 'bad_slot' };
     if (isFilled(player.track[index])) return { ok: false, reason: 'bad_slot' };
 
-    const options = validSlots(player.track, this.value);
-    const ordered = options.indexOf(index) !== -1;
-    // 반드시 놓아야 합니다. 오름차순에 맞는 칸이 있을 때는 그 칸에만 놓을 수 있습니다.
-    if (!ordered && options.length) return { ok: false, reason: 'bad_slot' };
-
+    // 빈칸이면 어디든 내 마음대로 놓을 수 있습니다. (규칙이 칸을 고르지 않습니다)
     player.track[index] = this.value;
     player.lastSlot = index;
     player.filled = filledCount(player.track);
     player.score = longestRun(player.track);
-    if (!ordered) player.forcedTurns += 1;
-    this.lastMove = { seq: this.seq + 1, playerId: playerId, value: this.value, slot: index, forced: !ordered };
+    this.lastMove = { seq: this.seq + 1, playerId: playerId, value: this.value, slot: index };
     this.pushLog(player.name + '님이 ' + displayValue(this.value) + josa(isJoker(this.value) ? '조커' : this.value, '을', '를') +
-      ' ' + (index + 1) + '번째 칸에 놓았습니다. (이어진 구간 ' + player.score + ')' +
-      (ordered ? '' : ' ⚠️ 오름차순이 끊겼어요.'));
+      ' ' + (index + 1) + '번째 칸에 놓았습니다. (이어진 구간 ' + player.score + ')');
     this.waiting = this.waiting.filter(function (id) { return id !== playerId; });
     if (player.filled >= TRACK) this.pushLog('🎉 ' + player.name + '님의 트랙 20칸이 모두 찼습니다!');
     this.advanceIfReady();
-    return { ok: true, forced: !ordered, score: player.score };
+    return { ok: true, score: player.score };
   };
 
   /** 이제는 건너뛰기가 없습니다. (빈칸이 있으면 반드시 놓아야 합니다) */
@@ -300,14 +293,12 @@
         seat: p.seat,
         score: p.score,
         filled: p.filled,
-        forcedTurns: p.forcedTurns,
         longest: p.score
       };
     });
     rows.sort(function (a, b) {
       if (b.score !== a.score) return b.score - a.score;
       if (b.filled !== a.filled) return b.filled - a.filled;
-      if (a.forcedTurns !== b.forcedTurns) return a.forcedTurns - b.forcedTurns;
       return a.seat - b.seat;
     });
     rows.forEach(function (row, i) { row.rank = i + 1; });
@@ -322,7 +313,6 @@
   Game.prototype.stateFor = function (viewerId) {
     const self = this;
     const viewer = viewerId ? this.playerById(viewerId) : null;
-    const viewerOptions = viewer ? validSlots(viewer.track, this.value) : [];
     return {
       gameId: 'streams',
       status: this.status,
@@ -336,8 +326,8 @@
       waiting: this.waiting.slice(),
       remaining: this.deck.length,
       youCanPlace: !!(viewerId && this.waiting.indexOf(viewerId) !== -1),
-      youSlots: viewer ? (viewerOptions.length ? viewerOptions : emptySlots(viewer.track)) : [],
-      youForced: !!(viewer && this.waiting.indexOf(viewerId) !== -1 && viewerOptions.length === 0),
+      // 내가 놓을 수 있는 칸 = 아직 비어 있는 모든 칸 (어디에나 자유롭게)
+      youSlots: viewer ? emptySlots(viewer.track) : [],
       lastMove: this.lastMove,
       youId: viewerId || null,
       players: this.players.map(function (p) {
@@ -350,7 +340,6 @@
           track: p.track.slice(),
           score: p.score,
           filled: p.filled,
-          forcedTurns: p.forcedTurns,
           done: p.filled >= TRACK,
           isYou: p.id === viewerId,
           acted: p.lastSlot !== null
@@ -362,9 +351,9 @@
   };
 
   /**
-   * 봇: '이 숫자는 이쯤에 놓는다'는 기준(숫자 위치에 비례한 칸)에 가장 가까운 칸을 고릅니다.
-   * 앞으로 나올 숫자를 위해 빈 공간을 고르게 남기는 방법입니다.
-   * 오름차순에 맞는 칸이 없으면 빈칸 중 가장 어울리는 곳에 강제로 놓습니다.
+   * 봇: 오름차순이 되는 칸을 우선 고르고, 그런 칸이 없으면
+   * '이 숫자는 이쯤에 놓는다'는 기준(숫자 위치에 비례한 칸)에 가장 가까운 빈칸을 고릅니다.
+   * 사람은 규칙과 상관없이 어디에나 놓을 수 있습니다.
    */
   function botChoice(game, player) {
     if (game.status !== 'playing' || game.value === null || !player) return null;

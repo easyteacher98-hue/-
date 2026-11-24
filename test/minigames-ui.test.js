@@ -123,13 +123,16 @@ test('숫자 줄세우기: 입장 화면에서 번호를 넣고, AI 봇 연습�
     click(window, '[data-action="mini.startBot"]');
     await waitFor(function () { return window.document.querySelectorAll('.mg-slot').length >= 40; }, '트랙 그리기');
     const canPlace = window.document.querySelectorAll('.mg-slot.can-place');
-    assert.ok(canPlace.length > 0, '놓을 수 있는 칸이 반짝여야 한다');
-    const tileValue = Number(window.document.querySelector('.mg-num-tile').textContent);
+    assert.equal(canPlace.length, 20, '내 트랙의 빈 20칸이 모두 눌러 놓을 수 있는 칸');
+    assert.ok(window.document.querySelector('.mg-track-hint'), '빈 칸을 누르라는 안내');
+    assert.ok(!window.document.querySelector('.mg-track-hint.is-forced'), '강제 배치 경고는 없어졌다');
+    assert.ok(!window.document.querySelector('.mg-slot.forced'), '막힌 칸 강조는 없어졌다');
+    const tileText = window.document.querySelector('.mg-num-tile').textContent.trim();
     canPlace[0].click();
     await sleep(300);
     const filled = window.document.querySelectorAll('.mg-slot.filled');
     assert.ok(filled.length >= 1, '숫자가 놓여야 한다');
-    assert.ok(Array.prototype.some.call(filled, function (el) { return Number(el.textContent) === tileValue; }));
+    assert.ok(Array.prototype.some.call(filled, function (el) { return el.textContent.trim() === tileText; }));
 
     // 방향키/스와이프 대신 클릭으로만 진행되므로 오류가 없어야 한다
     assert.deepEqual(dom.__errors.map(String), []);

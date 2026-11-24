@@ -3269,7 +3269,7 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
   .bm-game { grid-template-columns: minmax(0, 1fr) 420px; }
 }
 
-/* ---------- 숫자 줄세우기: 조커(★) · 강제 배치 표시 ---------- */
+/* ---------- 숫자 줄세우기: 조커(★) 표시 ---------- */
 .mg-num-tile.is-joker {
   background: linear-gradient(140deg, #ffd76b, #f0a11c);
   color: #5c3a06;
@@ -3281,15 +3281,6 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
   color: #7a4f00;
   font-weight: 900;
 }
-.mg-slot.can-place.forced {
-  border-color: #e8795c;
-  background: #ffefe8;
-  color: #b0472f;
-  animation: none;
-  box-shadow: 0 0 0 3px rgba(232, 121, 92, 0.18);
-}
-.mg-slot.can-place.forced:hover { background: #ffe3da; }
-.mg-track-hint.is-forced { color: #b0472f; font-weight: 900; }
 
 /* =========================================================
    데스크톱 화면 다듬기 (넓은 화면에서 판·카드가 한눈에)

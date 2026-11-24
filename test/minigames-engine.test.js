@@ -15,13 +15,41 @@ const Yut = require('../public/yut-engine.js');
 
 /* ---------------- 숫자 줄세우기 ---------------- */
 
-test('숫자 줄세우기: 트랙은 왼쪽에서 오른쪽으로 커져야만 놓을 수 있다', function () {
+test('숫자 줄세우기: 빈칸이라면 어디에나 내 마음대로 놓을 수 있다 (제한 없음)', function () {
+  const game = new Streams.Game([{ id: 'a', name: '가' }], { seed: 7 });
+  const a = game.playerById('a');
+  a.track[10] = 15;
+  a.filled = Streams.filledCount(a.track);
+  game.value = 8;
+  game.waiting = ['a'];
+
+  const state = game.stateFor('a');
+  assert.equal(state.youSlots.length, 19, '비어 있는 19칸 모두 고를 수 있다');
+  assert.equal(state.youForced, undefined, '강제 배치 상태는 없어졌다');
+
+  // 15 오른쪽(큰 수 자리)에 8을 놓아도, 왼쪽에 큰 수를 놓아도 모두 허용된다
+  assert.equal(game.place('a', 12).ok, true, '오른쪽에 작은 수도 자유롭게');
+  assert.equal(a.track[12], 8);
+  assert.equal(Streams.longestRun(a.track), 1, '15와 8 사이가 비어 이어지지 않는다');
+
+  const game2 = new Streams.Game([{ id: 'a', name: '가' }], { seed: 7 });
+  const b = game2.playerById('a');
+  b.track[2] = 5;
+  b.filled = Streams.filledCount(b.track);
+  game2.value = 20;
+  game2.waiting = ['a'];
+  assert.equal(game2.place('a', 0).ok, true, '앞쪽 빈칸에도 자유롭게');
+  assert.equal(b.track[0], 20);
+  assert.equal(game2.place('a', 2).reason, 'bad_slot', '이미 찬 칸만 막는다');
+});
+
+test('봇 참고 도우미: 오름차순이 되는 칸을 판단한다 (규칙 제한 아님)', function () {
   const track = new Array(20).fill(null);
   track[5] = 10;
   assert.equal(Streams.canPlaceAt(track, 3, 7), true, '왼쪽에는 작은 수');
   assert.equal(Streams.canPlaceAt(track, 8, 12), true, '오른쪽에는 큰 수');
-  assert.equal(Streams.canPlaceAt(track, 8, 7), false, '오른쪽에 작은 수는 안 됨');
-  assert.equal(Streams.canPlaceAt(track, 3, 12), false, '왼쪽에 큰 수는 안 됨');
+  assert.equal(Streams.canPlaceAt(track, 8, 7), false, '오른쪽에 작은 수는 오름차순이 아님');
+  assert.equal(Streams.canPlaceAt(track, 3, 12), false, '왼쪽에 큰 수는 오름차순이 아님');
   assert.equal(Streams.canPlaceAt(track, 5, 9), false, '이미 채워진 칸');
   assert.deepEqual(Streams.validSlots(track, 10), []);
 });
@@ -52,12 +80,12 @@ test('숫자 줄세우기: 1~30 타일 + 조커 ★ 2장 중 20장을 뽑아 20�
   assert.ok(game.value === Streams.JOKER || (game.value >= 1 && game.value <= 30));
 
   const a = game.playerById('a');
-  const slots = Streams.validSlots(a.track, game.value);
-  assert.ok(slots.length > 0);
-  assert.equal(game.place('nobody', slots[0]).reason, 'unknown_player', '모르는 사람은 놓을 수 없음');
-  const result = game.place('a', slots[slots.length - 1]);
+  const empties = Streams.emptySlots(a.track);
+  assert.ok(empties.length > 0);
+  assert.equal(game.place('nobody', empties[0]).reason, 'unknown_player', '모르는 사람은 놓을 수 없음');
+  const result = game.place('a', empties[empties.length - 1]);
   assert.equal(result.ok, true);
-  assert.equal(a.track[slots[slots.length - 1]], game.value);
+  assert.equal(a.track[empties[empties.length - 1]], game.value);
 });
 
 test('숫자 줄세우기: 조커(★)는 어디에나 놓이고 앞뒤 숫자를 이어 준다', function () {
@@ -85,24 +113,23 @@ test('숫자 줄세우기: 조커(★)는 어디에나 놓이고 앞뒤 숫자�
   assert.equal(Streams.longestRun(run), 4, '3·4·★·12 가 이어진 한 구간');
 });
 
-test('숫자 줄세우기: 오름차순 칸이 없으면 빈칸에 강제로 놓고, 그 자리에서 줄이 끊긴다', function () {
+test('숫자 줄세우기: 오름차순이 끊기는 칸에 놓아도 되고, 그 자리에서 줄이 끊길 뿐이다', function () {
   const game = new Streams.Game([{ id: 'a', name: '가' }], { seed: 5 });
   const a = game.playerById('a');
   for (let i = 0; i < 10; i++) a.track[i] = 11 + i; // 0~9번 칸: 11~20
   a.filled = Streams.filledCount(a.track);
 
-  // 5는 11보다 작아서 왼쪽에 놓을 자리가 없다 → 강제 배치
+  // 5는 11보다 작아서 오름차순이 되는 자리가 없지만, 어느 빈칸에든 놓을 수 있다
   game.value = 5;
   game.waiting = ['a'];
   const state = game.stateFor('a');
-  assert.equal(state.youForced, true);
   assert.equal(state.youSlots.length, 10, '남은 빈칸 10곳 모두 고를 수 있다');
   assert.equal(game.skip('a').reason, 'must_place', '건너뛰기는 없음');
   assert.equal(game.place('a', 5).ok, false, '이미 채워진 칸은 안 됨');
+  assert.equal(game.place('a', 30).ok, false, '트랙 밖은 안 됨');
 
-  const forced = game.place('a', 15);
-  assert.equal(forced.ok, true);
-  assert.equal(forced.forced, true);
+  const placed = game.place('a', 15);
+  assert.equal(placed.ok, true);
   assert.equal(a.track[15], 5);
   assert.equal(Streams.longestRun(a.track), 10, '끊긴 자리 앞의 11~20 구간만 남는다');
 });
@@ -120,10 +147,9 @@ test('숫자 줄세우기: 20칸을 모두 채울 때까지 끝나지 않고, �
     assert.ok(waiting.length > 0, '매 차례 모두가 반드시 한 칸씩 놓는다');
     for (const id of waiting) {
       const player = game.playerById(id);
-      const options = Streams.validSlots(player.track, game.value);
       const empties = Streams.emptySlots(player.track);
       assert.ok(empties.length > 0);
-      const slot = options.length ? options[Math.floor(options.length / 2)] : empties[empties.length - 1];
+      const slot = empties[Math.floor(empties.length / 2)];
       const r = game.place(id, slot);
       assert.equal(r.ok, true);
     }
