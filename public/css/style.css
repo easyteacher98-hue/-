@@ -3110,7 +3110,7 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
   .offline-note { font-size: 15px; }
 
   /* ---------- 8) 전국여행 마블 ---------- */
-  .bm-game { grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; }
+  .bm-game { grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; }
   .bm-side .panel { padding: 18px; }
   .bm-round-chip, .bm-turn-chip { font-size: 15.5px; padding: 6px 14px; }
   .bm-round-chip b { font-size: 18px; }
@@ -3145,7 +3145,7 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
   .bm-3d-chip { font-size: 14px; padding: 4px 12px; }
 
   /* ---------- 9) 미니 게임 공통 ---------- */
-  .mg-game { grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; }
+  .mg-game { grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; }
   .mg-side .panel { padding: 18px; }
   .mg-head-emoji { font-size: 54px; }
   .mg-board { padding: 18px; gap: 14px; border-radius: 28px; }
@@ -3176,7 +3176,7 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
   .mg-jg-grid { width: min(100%, 560px); }
   .mg-jg-foot { font-size: 14px; }
   .mg-jg-captured { font-size: 13px; }
-  .sd-stage { grid-template-columns: minmax(0, 1fr) 320px; gap: 22px; }
+  .sd-stage { grid-template-columns: minmax(0, 1fr) 300px; gap: 22px; }
   .sd-grid { width: min(100%, 560px); }
   .sd-cell { font-size: clamp(18px, 2vw, 30px); }
   .sd-num { font-size: 26px; }
