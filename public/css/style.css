@@ -3290,3 +3290,25 @@ body[data-screen="bm.bot"] .site-credit { padding-bottom: 6px; }
 }
 .mg-slot.can-place.forced:hover { background: #ffe3da; }
 .mg-track-hint.is-forced { color: #b0472f; font-weight: 900; }
+
+/* =========================================================
+   데스크톱 화면 다듬기 (넓은 화면에서 판·카드가 한눈에)
+   ========================================================= */
+
+@media (min-width: 1000px) {
+  /* 모둠 방 6개: 3칸씩 두 줄 */
+  .group-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* 출석번호·이름 입력칸이 화면 끝까지 늘어나지 않게 */
+  .number-panel .field { max-width: 560px; }
+  .number-panel .number-input { max-width: 140px; }
+  /* 오목판은 화면 높이에 맞춰 (스크롤 없이 한 판이 다 보이게) */
+  .mg-gomoku-grid { width: min(100%, 760px, calc(100vh - 300px)); }
+  /* 숫자 줄세우기: 트랙 4개를 두 줄로 */
+  .mg-streams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+  .mg-streams > .mg-turn-bar { grid-column: 1 / -1; }
+}
+
+@media (min-width: 1500px) {
+  /* 아주 넓은 화면: 모둠 방 6개를 한 줄에 */
+  .group-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
