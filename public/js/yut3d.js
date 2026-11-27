@@ -94,9 +94,9 @@
 
     /* 1) 따뜻한 원목 프레임 */
     const wood = ctx.createLinearGradient(0, 0, size, size);
-    wood.addColorStop(0, '#ecc79a');
-    wood.addColorStop(0.42, '#d9a76c');
-    wood.addColorStop(1, '#c48d51');
+    wood.addColorStop(0, '#e6c39b');
+    wood.addColorStop(0.42, '#d2a877');
+    wood.addColorStop(1, '#bf9064');
     ctx.fillStyle = wood;
     roundRectPath(ctx, 0, 0, size, size, 46);
     ctx.fill();
@@ -130,9 +130,9 @@
     roundRectPath(ctx, inset, inset, inner, inner, 30);
     ctx.clip();
     const felt = ctx.createRadialGradient(size * 0.44, size * 0.38, size * 0.05, size * 0.5, size * 0.5, size * 0.74);
-    felt.addColorStop(0, '#fff9ec');
-    felt.addColorStop(0.62, '#fbeed8');
-    felt.addColorStop(1, '#f2ddbb');
+    felt.addColorStop(0, '#fffbf2');
+    felt.addColorStop(0.62, '#f9edda');
+    felt.addColorStop(1, '#f0dfc4');
     ctx.fillStyle = felt;
     ctx.fillRect(inset, inset, inner, inner);
     // 펠트 결 (아주 옅은 점)
@@ -458,12 +458,12 @@
     const boardTexture = drawBoardTexture(THREE, nodePos, paths);
     const boardGeo = new THREE.BoxGeometry(WIN.x, 0.55, WIN.z);
     const boardMat = [
-      new THREE.MeshLambertMaterial({ color: '#c08a52' }),
-      new THREE.MeshLambertMaterial({ color: '#b8813f' }),
+      new THREE.MeshLambertMaterial({ color: '#bb9067' }),
+      new THREE.MeshLambertMaterial({ color: '#b3875d' }),
       new THREE.MeshLambertMaterial({ map: boardTexture }),
-      new THREE.MeshLambertMaterial({ color: '#a9744a' }),
-      new THREE.MeshLambertMaterial({ color: '#bb8348' }),
-      new THREE.MeshLambertMaterial({ color: '#bb8348' })
+      new THREE.MeshLambertMaterial({ color: '#a97c52' }),
+      new THREE.MeshLambertMaterial({ color: '#b68b60' }),
+      new THREE.MeshLambertMaterial({ color: '#b68b60' })
     ];
     const boardMesh = new THREE.Mesh(boardGeo, boardMat);
     boardMesh.position.y = -0.275;
@@ -471,7 +471,7 @@
 
     // 한 단 아래 받침 (원목 테두리가 두툼해 보이게)
     const rimGeo = new THREE.BoxGeometry(WIN.x + 0.46, 0.16, WIN.z + 0.46);
-    const rimMat = new THREE.MeshLambertMaterial({ color: '#a9744a' });
+    const rimMat = new THREE.MeshLambertMaterial({ color: '#a97c52' });
     const rimMesh = new THREE.Mesh(rimGeo, rimMat);
     rimMesh.position.y = -0.63;
     boardGroup.add(rimMesh);
