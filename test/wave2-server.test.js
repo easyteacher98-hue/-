@@ -282,7 +282,11 @@ test('새 게임 5종은 모두 모둠 방 6개씩 열려 있고, 서버 게임 
     assert.equal(solo.mode, 'solo');
     assert.deepEqual(solo.grades, ['low', 'mid', 'high']);
 
-    const rooms = welcome.rooms.filter(function (r) { return r.classCode === 'DEMO'; });
+    // 연결 직후에는 방 목록을 보내지 않습니다. 연습 교실(DEMO)은 명시적으로 요청합니다.
+    assert.deepEqual(welcome.rooms, []);
+    client.send({ t: 'overview', classCode: 'DEMO' });
+    const demo = await client.next(function (m) { return m.t === 'rooms' && m.classCode === 'DEMO'; });
+    const rooms = demo.rooms.filter(function (r) { return r.classCode === 'DEMO'; });
     ['rummi', 'oldmaid', 'janggi', 'onecard', 'dots'].forEach(function (id) {
       const mine = rooms.filter(function (r) { return r.gameId === id; });
       assert.equal(mine.length, 6, id + ' 6모둠 방');

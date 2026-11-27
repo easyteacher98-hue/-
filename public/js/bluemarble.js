@@ -31,7 +31,10 @@
     fallback: false,
     bot: { active: false, game: null, driver: null, timer: null, level: 'normal', count: 4 },
     botSig: '',
-    pendingResetCode: null
+    pendingResetCode: null,
+    rejoinTried: false,
+    // 화면을 천천히 보여 주기 위한 페이서 (말이 걷는 동안은 다음 상태를 기다립니다)
+    pace: { lastShownAt: 0, timer: null, pending: false, urgent: false }
   };
 
   /* ---------------- 공통 도우미 ---------------- */
@@ -217,7 +220,11 @@
       return;
     }
     BG.net.connect();
-    const groups = S.rooms.filter(function (r) { return r.gameId === 'bluemarble'; });
+    if (BG.requestRooms) BG.requestRooms('bluemarble');
+    const loadedGroups = S.rooms.filter(function (r) { return r.gameId === 'bluemarble'; });
+    const groups = loadedGroups.length || !BG.net.connected
+      ? loadedGroups
+      : (BG.placeholderRooms ? BG.placeholderRooms('bluemarble', 4) : []);
     const cards = groups.length
       ? groups.map(groupCard).join('')
       : '<div class="empty">모둠 방 정보를 불러오는 중입니다…<br>서버가 꺼져 있다면 아래 <b>AI 봇과 연습</b>을 이용해 주세요.</div>';
@@ -868,6 +875,66 @@
     if (document.querySelector('.result-modal')) BG.ui.closeModal();
   }
 
+  /* ---------------- 진행 속도 조절 ----------------
+   * 주사위·말 이동·이벤트를 눈으로 따라갈 수 있게, 게임 중 화면 갱신 사이에
+   * 최소 간격(PACE_MS)을 둡니다. 말이 아직 걷고 있으면 다 걸을 때까지 기다렸다가 보여 줍니다.
+   * (내가 누른 동작은 바로 보여 줍니다)
+   */
+  const PACE_MS = 900;
+
+  function boardBusy() {
+    return !!(S.board && typeof S.board.isBusy === 'function' && S.board.isBusy());
+  }
+
+  function showRoomNow() {
+    if (S.pace.timer) {
+      clearTimeout(S.pace.timer);
+      S.pace.timer = null;
+    }
+    S.pace.pending = false;
+    S.pace.lastShownAt = Date.now();
+    const path = BG.currentPath();
+    if (!S.room) return;
+    if (path.indexOf('/bluemarble/room/') === 0) renderRoom([S.room.code]);
+    else if (path.indexOf('/bluemarble/watch/') === 0) renderWatch([S.room.code]);
+  }
+
+  function showRoomPaced() {
+    S.pace.pending = true;
+    if (S.pace.urgent) {
+      S.pace.urgent = false;
+      showRoomNow();
+      return;
+    }
+    if (S.pace.timer) return;
+    tickPace();
+  }
+
+  function tickPace() {
+    if (!S.pace.pending) return;
+    const elapsed = Date.now() - S.pace.lastShownAt;
+    const wait = Math.max(0, PACE_MS - elapsed);
+    // 말이 걷거나 주사위가 구르는 중이면 조금 더 기다립니다.
+    const delay = boardBusy() ? Math.max(wait, 220) : wait;
+    if (delay > 0) {
+      S.pace.timer = setTimeout(function () {
+        S.pace.timer = null;
+        tickPace();
+      }, delay);
+      return;
+    }
+    showRoomNow();
+  }
+
+  /** 내가 누른 버튼은 기다리지 않고 바로 화면에 보여 줍니다. */
+  function markActionSent() {
+    S.pace.urgent = true;
+    if (S.pace.timer) {
+      clearTimeout(S.pace.timer);
+      S.pace.timer = null;
+    }
+  }
+
   function renderRoom(params) {
     const code = String(params[0] || '').toUpperCase();
     BG.net.connect();
@@ -1378,6 +1445,7 @@
       updateBotScreen();
       return;
     }
+    markActionSent();
     BG.net.send({ t: 'action', action: 'roll' });
   };
 
@@ -1388,6 +1456,7 @@
       updateBotScreen();
       return;
     }
+    markActionSent();
     BG.net.send({ t: 'action', action: 'buy' });
   };
 
@@ -1398,6 +1467,7 @@
       updateBotScreen();
       return;
     }
+    markActionSent();
     BG.net.send({ t: 'action', action: 'build' });
   };
 
@@ -1407,6 +1477,7 @@
       updateBotScreen();
       return;
     }
+    markActionSent();
     BG.net.send({ t: 'action', action: 'skip' });
   };
 
@@ -1417,6 +1488,7 @@
       updateBotScreen();
       return;
     }
+    markActionSent();
     BG.net.send({ t: 'action', action: 'payBail' });
   };
 
@@ -1598,11 +1670,14 @@
   });
 
   BG.net.on('welcome', function (msg) {
+    if (msg && msg.classCode && msg.classCode !== BG.state.classCode) return;
     S.rooms = (msg.rooms || []).filter(function (r) { return r.gameId === 'bluemarble'; });
     refreshRoomList();
   });
 
   BG.net.on('rooms', function (msg) {
+    if (!msg) return;
+    if (msg.classCode && msg.classCode !== BG.state.classCode) return;
     S.rooms = (msg.rooms || []).filter(function (r) { return r.gameId === 'bluemarble'; });
     refreshRoomList();
   });
@@ -1613,6 +1688,7 @@
     const expected = !!(msg.created || msg.resumed || S.pendingJoin === msg.code);
     S.pendingJoin = null;
     S.resumeSent = {};
+    S.rejoinTried = false;
     if (!expected) {
       S.room = null;
       BG.state.roomView = null;
@@ -1632,9 +1708,13 @@
     S.room = msg.room;
     S.role = msg.room.role;
     BG.state.roomView = msg.room;
-    const path = BG.currentPath();
-    if (path.indexOf('/bluemarble/room/') === 0) renderRoom([msg.room.code]);
-    else if (path.indexOf('/bluemarble/watch/') === 0) renderWatch([msg.room.code]);
+    // 게임 중에는 서버 상태가 한꺼번에 여러 번 올 수 있습니다.
+    // 주사위가 구르고 말이 한 칸씩 걷는 것을 눈으로 따라갈 수 있게, 화면은 일정 간격으로만 바꿉니다.
+    if (msg.room.status === 'playing') showRoomPaced();
+    else {
+      S.pace.pending = false;
+      showRoomNow();
+    }
   });
 
   BG.net.on('spectating', function (msg) {
@@ -1696,6 +1776,14 @@
         BG.navigate('/bluemarble/teacher');
       }
       return;
+    }
+    if ((code === 'no_seat' || code === 'no_room') && !S.rejoinTried) {
+      // 서버가 잠깐 새로 켜져 자리를 잃었을 때: 같은 번호로 바로 다시 들어가 봅니다.
+      const savedSeat = getSeat();
+      if (savedSeat && savedSeat.code && path.indexOf('/bluemarble/room/' + savedSeat.code) === 0) {
+        S.rejoinTried = true;
+        if (BG.tryRejoin && BG.tryRejoin('bluemarble', savedSeat.code)) return;
+      }
     }
     if (['no_seat', 'no_room', 'no_name', 'full', 'playing', 'dup_name', 'dup_number', 'bad_number', 'already_in_room'].indexOf(code) !== -1) {
       clearSeat();

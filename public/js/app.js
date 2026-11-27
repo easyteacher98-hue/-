@@ -591,8 +591,59 @@
 
   BG.net.on('open', function () {
     wasConnected = true;
+    // 다시 연결되면 서버는 이 연결이 어느 반인지 모릅니다. 우리 반을 먼저 알려 줍니다.
+    // (이게 없으면 새로고침 없이 다시 붙었을 때 방 목록·알림을 못 받거나 연습 교실로 보입니다)
+    if (BG.state.classCode) BG.net.send({ t: 'classEnter', code: BG.state.classCode });
     if (document.body.dataset.screen) BG.render();
   });
+
+  /* ---------- 끊겼다 붙었을 때 자동 재입장 ----------
+   * 서버가 새로 켜지거나 잠깐 끊겨 자리를 잃었을 수 있습니다. 그때는 같은 번호로 바로 다시 들어가 봅니다.
+   * (들어가지 못하면 각 게임 화면이 모둠 선택으로 돌려보냅니다)
+   */
+  BG.tryRejoin = function (gameId, code) {
+    if (!gameId || !code) return false;
+    const number = String(BG.state.number || BG.numberFor(BG.state.classCode) || '').replace(/[^0-9]/g, '');
+    if (!number) return false;
+    const name = BG.state.name || BG.nameFor(BG.state.classCode) || '';
+    BG.net.send({ t: 'join', gameId: gameId, code: code, classCode: BG.state.classCode, number: number, studentName: name });
+    return true;
+  };
+
+  /** 모둠 방 목록을 요청합니다. (반 코드가 없으면 연습 교실(DEMO)을 명시적으로 고릅니다)
+   *  화면을 다시 그릴 때마다 요청이 되풀이되지 않도록 1초에 한 번만 보냅니다.
+   */
+  const lastRoomRequest = {};
+  BG.requestRooms = function (gameId) {
+    const key = String(gameId || 'all');
+    const now = Date.now();
+    if (lastRoomRequest[key] && now - lastRoomRequest[key] < 1000) return;
+    lastRoomRequest[key] = now;
+    BG.net.send({ t: 'overview', gameId: gameId || null, classCode: BG.state.classCode || 'DEMO' });
+  };
+
+  /** 서버 목록을 기다리는 동안 화면에 먼저 보여 주는 1~6모둠 방 (누르면 바로 입장됩니다) */
+  BG.placeholderRooms = function (gameId, capacity) {
+    const out = [];
+    for (let i = 1; i <= 6; i++) {
+      out.push({
+        gameId: gameId,
+        code: String(i),
+        name: i + '모둠',
+        isGroup: true,
+        capacity: capacity || 4,
+        status: 'waiting',
+        playerCount: 0,
+        humanCount: 0,
+        botCount: 0,
+        connectedCount: 0,
+        seats: [],
+        players: [],
+        loading: true
+      });
+    }
+    return out;
+  };
 
   BG.net.on('close', function () {
     // 연결이 끊겼을 때만 화면을 다시 그립니다. (서버 없는 정적 사이트에서

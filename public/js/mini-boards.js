@@ -299,21 +299,28 @@
     '</svg>';
   }
 
-  function sticksHtml(info) {
+  function sticksHtml(info, animate) {
     if (!info) return '<div class="mg-sticks"><span class="mg-stick-empty">윷가락을 던져 주세요</span></div>';
     const sticks = info.sticks.map(function (back) {
       return '<span class="mg-stick' + (back ? ' back' : '') + '"></span>';
     }).join('');
     const label = info.name + (info.steps > 0 ? ' · ' + info.steps + '칸' : ' · 한 칸 뒤로');
-    return '<div class="mg-sticks">' + sticks + '<b class="mg-stick-name">' + esc(label) + '</b>' +
+    return '<div class="mg-sticks' + (animate ? ' is-toss' : '') + '" data-seq="' + (info.seq || 0) + '">' + sticks +
+      '<b class="mg-stick-name">' + esc(label) + '</b>' +
       (info.bonus ? '<span class="mg-bonus">한 번 더!</span>' : '') + '</div>';
   }
+
+  /* 윷가락이 새로 던져졌을 때만 던지는 동작을 보여 줍니다. */
+  const yutUI = { throwSeq: 0 };
 
   function yutBoard(state, ctx) {
     const me = state.youId;
     const myPlayer = state.players.find(function (p) { return p.id === me; });
     const myTurn = state.status === 'playing' && state.turnPlayerId === me;
     const Y = window.Yut;
+    const throwSeq = state.throwInfo ? state.throwInfo.seq : 0;
+    const tossNow = !!throwSeq && throwSeq !== yutUI.throwSeq;
+    if (throwSeq) yutUI.throwSeq = throwSeq;
 
     let actionBox = '';
     if (state.status === 'playing') {
@@ -375,14 +382,19 @@
 
     return '<div class="mg-board mg-yut">' +
       '<div class="mg-turn-bar ' + (myTurn ? 'is-me' : '') + '">' +
-        sticksHtml(state.throwInfo) +
+        sticksHtml(state.throwInfo, tossNow) +
         '<span class="mg-turn-text">' + (state.status === 'finished' ? '게임 끝' :
           myTurn ? (state.phase === 'throw' ? '내 차례! 윷가락을 던지세요.' : '옮길 말을 고르세요!') :
             esc((state.players.find(function (p) { return p.id === state.turnPlayerId; }) || {}).name || '') + ' 차례') + '</span>' +
       '</div>' +
-      '<div class="mg-yut-stage">' + yutSvg(state) + '</div>' +
+      '<div class="mg-yut-stage">' +
+        // 3D 말판(WebGL)을 그릴 수 있으면 여기에 그립니다. 그림을 못 그리면 아래 2D 말판이 보입니다.
+        '<div class="mg-yut-3d" id="mg-yut3d" aria-hidden="true"></div>' +
+        '<div class="mg-yut-svg-holder">' + yutSvg(state) + '</div>' +
+        '<div class="mg-yut-3d-hint">🖱️ 드래그해서 판을 돌려 보세요</div>' +
+      '</div>' +
       '<div class="mg-yut-players">' + scoreRows + '</div>' +
-      actionBox +
+      '<div class="mg-yut-actions">' + actionBox + '</div>' +
     '</div>';
   }
 
@@ -759,6 +771,7 @@
     gomoku: gomokuBoard,
     liar: liarBoard,
     yut: yutBoard,
+    yutSvg: yutSvg,
     rummi: rummiBoard,
     oldmaid: oldmaidBoard,
     janggi: janggiBoard,

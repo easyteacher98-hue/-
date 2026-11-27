@@ -194,12 +194,21 @@
     stats: [],
     pendingJoin: null,
     resumeSent: {},
+    rejoinTried: false,
     spectateSent: {},
     lastResult: null,
     resultShown: {},
     authPending: false,
+    yut3d: null,
     bot: { gameId: null, game: null, driver: null, timer: null, players: 2, running: false, resultShown: false }
   };
+
+  /* 화면을 벗어나면 3D 말판(WebGL)을 정리합니다. */
+  if (BG.onRouteLeave) {
+    BG.onRouteLeave(function (from) {
+      if (String(from || '').indexOf('/yut') === 0) disposeYut3d();
+    });
+  }
 
   /* ---------------- 도우미 ---------------- */
 
@@ -372,7 +381,11 @@
     if (!meta) { BG.navigate('/'); return; }
     if (!BG.state.classCode) { BG.navigate('/'); return; }
     ensureConnected();
-    const rooms = S.rooms.filter(function (r) { return r.gameId === gameId; });
+    if (BG.requestRooms) BG.requestRooms(gameId);
+    const loadedRooms = S.rooms.filter(function (r) { return r.gameId === gameId; });
+    const rooms = loadedRooms.length || !BG.net.connected
+      ? loadedRooms
+      : (BG.placeholderRooms ? BG.placeholderRooms(gameId, 4) : []);
     const cards = rooms.length
       ? rooms.map(function (r) { return groupCard(gameId, r); }).join('')
       : '<div class="empty">모둠 방 정보를 불러오는 중입니다…<br>서버가 꺼져 있다면 아래 <b>AI 봇 연습</b>을 이용해 주세요.</div>';
@@ -618,6 +631,77 @@
     return GAMES[id];
   }
 
+  /* ---------------- 윷놀이 3D 말판 ----------------
+   * 화면을 통째로 다시 그리면 3D 말판(canvas)이 사라져 버립니다.
+   * 그래서 윷놀이는 말판은 그대로 두고 바퀴·말 목록·버튼만 새로 그립니다.
+   */
+  function yutStageNeedsMount() {
+    const host = document.getElementById('mg-yut3d');
+    if (!host) return null;
+    if (!S.yut3d || S.yut3d.host !== host) {
+      if (S.yut3d) { try { S.yut3d.dispose(); } catch (err) { /* ignore */ } }
+      S.yut3d = BG.yut3d ? BG.yut3d.mount(host) : null;
+    }
+    return host;
+  }
+
+  /** 윷놀이 말판(3D 또는 2D)을 지금 상태로 맞춥니다. */
+  function applyYutBoard(state, force2d) {
+    if (!state) return;
+    const stage = document.querySelector('.mg-yut-stage');
+    if (!stage) return;
+    const holder = stage.querySelector('.mg-yut-svg-holder');
+    const can3d = !force2d && !!(BG.yut3d && BG.yut3d.supported && BG.yut3d.supported());
+    if (can3d) {
+      // 3D 말판 자리를 먼저 보이게 해 크기를 잡은 뒤에 그립니다.
+      stage.classList.add('is-3d');
+      yutStageNeedsMount();
+      if (S.yut3d && S.yut3d.applyState(state) !== false) {
+        if (holder && BG.miniBoards && BG.miniBoards.yutSvg) holder.innerHTML = BG.miniBoards.yutSvg(state);
+        return;
+      }
+    }
+    stage.classList.remove('is-3d');
+    disposeYut3d();
+    if (holder && BG.miniBoards && BG.miniBoards.yutSvg) holder.innerHTML = BG.miniBoards.yutSvg(state);
+  }
+
+  function disposeYut3d() {
+    if (S.yut3d) {
+      try { S.yut3d.dispose(); } catch (err) { /* ignore */ }
+      S.yut3d = null;
+    }
+  }
+
+  /**
+   * 게임 화면을 다시 그립니다.
+   * 윷놀이이고 이미 말판이 떠 있으면, 3D 말판은 그대로 두고 나머지 부분만 새로 그립니다.
+   */
+  function paintGameScreen(meta, state, room, opts) {
+    const screen = 'mg.' + meta.id + '.' + (opts && opts.bot ? 'bot' : (room && room.role === 'spectator' ? 'watch' : 'room'));
+    const liveBoard = document.querySelector('.mg-game .mg-board');
+    if (meta.id === 'yut' && liveBoard && screenName() === screen) {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = gameScreenHtml(meta, state, room, opts);
+      const nextBoard = wrap.querySelector('.mg-board');
+      if (nextBoard && nextBoard.classList.contains('mg-yut')) {
+        ['.mg-turn-bar', '.mg-yut-players', '.mg-yut-actions'].forEach(function (sel) {
+          const next = wrap.querySelector(sel);
+          const live = document.querySelector('.mg-game ' + sel);
+          if (next && live) live.innerHTML = next.innerHTML;
+        });
+        const nextSide = wrap.querySelector('.mg-side');
+        const liveSide = document.querySelector('.mg-game .mg-side');
+        if (nextSide && liveSide) liveSide.innerHTML = nextSide.innerHTML;
+        applyYutBoard(state);
+        return;
+      }
+    }
+    BG.ui.screen(gameScreenHtml(meta, state, room, opts), screen);
+    if (meta.id === 'yut') applyYutBoard(state);
+    else disposeYut3d();
+  }
+
   function gameScreenHtml(meta, game, room, opts) {
     const o = opts || {};
     const boardFn = BG.miniBoards && BG.miniBoards[meta.id];
@@ -689,10 +773,12 @@
     }
     const room = S.room;
     if (room.status === 'waiting') {
+      disposeYut3d();
       BG.ui.screen(lobbyHtml(meta, room), 'mg.' + meta.id + '.room');
       return;
     }
     BG.ui.screen(gameScreenHtml(meta, room.game, room, {}), 'mg.' + meta.id + '.room');
+    if (meta.id === 'yut') applyYutBoard(room.game);
   }
 
   function renderWatch(params) {
@@ -723,7 +809,7 @@
       BG.net.send({ t: 'spectate', gameId: meta.id, code: code, classCode: BG.state.classCode });
     }
     if (S.room && S.room.role === 'spectator' && S.room.game) {
-      BG.ui.screen(gameScreenHtml(meta, S.room.game, S.room, {}), 'mg.' + meta.id + '.watch');
+      paintGameScreen(meta, S.room.game, S.room, {});
       return;
     }
     BG.ui.screen(
@@ -794,7 +880,7 @@
     }
     if (S.bot.game && S.bot.game.status !== 'finished') {
       const state = S.bot.game.stateFor('me');
-      BG.ui.screen(gameScreenHtml(meta, state, null, { bot: true }), 'mg.' + gameId + '.bot');
+      paintGameScreen(meta, state, null, { bot: true });
       return;
     }
     const count = S.bot.players;
@@ -1247,6 +1333,7 @@
   }
 
   BG.net.on('welcome', function (msg) {
+    if (msg && msg.classCode && msg.classCode !== BG.state.classCode) return;
     S.rooms = msg.rooms || [];
     const id = routeGameId();
     if (!id) return;
@@ -1254,7 +1341,9 @@
     else if (screenName() === 'mg.' + id + '.teacher') renderTeacher(id);
   });
 
-  BG.net.on('rooms', function (msg) {
+  BG.net.on('rooms', function (msg) {    if (!msg) return;
+    // 다른 반 방 목록(반 코드가 다른 메시지)은 그리지 않습니다.
+    if (msg.classCode && msg.classCode !== BG.state.classCode) return;
     S.rooms = msg.rooms || [];
     const id = routeGameId();
     if (!id) return;
@@ -1274,6 +1363,7 @@
     const expected = !!(msg.created || msg.resumed || S.pendingJoin === msg.code);
     S.pendingJoin = null;
     S.resumeSent = {};
+    S.rejoinTried = false;
     if (!expected) {
       const strayMeta = GAMES[msg.gameId];
       S.room = null;
@@ -1302,9 +1392,9 @@
     const path = BG.currentPath();
     if (path.indexOf('/' + meta.id + '/room/') === 0) {
       if (msg.room.status === 'waiting') BG.ui.screen(lobbyHtml(meta, msg.room), 'mg.' + meta.id + '.room');
-      else BG.ui.screen(gameScreenHtml(meta, msg.room.game, msg.room, {}), 'mg.' + meta.id + '.room');
+      else paintGameScreen(meta, msg.room.game, msg.room, {});
     } else if (path.indexOf('/' + meta.id + '/watch/') === 0) {
-      if (msg.room.game) BG.ui.screen(gameScreenHtml(meta, msg.room.game, msg.room, {}), 'mg.' + meta.id + '.watch');
+      if (msg.room.game) paintGameScreen(meta, msg.room.game, msg.room, {});
     }
   });
 
@@ -1386,6 +1476,16 @@
       return;
     }
     if (code === 'bad_pin') return;
+    if ((code === 'no_seat' || code === 'no_room') && !S.rejoinTried) {
+      // 서버가 잠깐 새로 켜져 자리를 잃었을 때: 같은 번호로 바로 다시 들어가 봅니다.
+      const meta0 = miniGameMeta(routeGameId() || '');
+      const savedSeat = meta0 ? getSeat(meta0.id) : null;
+      const path0 = BG.currentPath();
+      if (meta0 && savedSeat && savedSeat.code && path0.indexOf('/' + meta0.id + '/room/') === 0) {
+        S.rejoinTried = true;
+        if (BG.tryRejoin && BG.tryRejoin(meta0.id, savedSeat.code)) return;
+      }
+    }
     if (['no_seat', 'no_room', 'no_name', 'full', 'playing', 'dup_name', 'dup_number', 'bad_number', 'already_in_room'].indexOf(code) !== -1) {
       const meta = miniGameMeta(routeGameId() || '');
       if (meta) clearSeat(meta.id);

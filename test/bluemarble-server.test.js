@@ -87,7 +87,13 @@ test('부루마블 모둠 방 6개가 열려 있고 2명이 입장해 서버가 
     const a = await connect(env.ws);
     clients.push(a);
     const welcome = await a.next('welcome');
-    const groups = welcome.rooms.filter(function (r) { return r.isGroup && r.gameId === 'bluemarble'; });
+    // 처음 연결에서는 다른 반(연습 교실 포함)의 방 목록을 보내지 않습니다.
+    assert.deepEqual(welcome.rooms, []);
+    assert.equal(welcome.classCode, null);
+    // 연습 교실(DEMO)을 명시적으로 골랐을 때만 그 반의 1~6모둠 방이 보입니다.
+    a.send({ t: 'overview', gameId: 'bluemarble', classCode: 'DEMO' });
+    const demoRooms = await a.next(function (m) { return m.t === 'rooms' && m.classCode === 'DEMO'; });
+    const groups = demoRooms.rooms.filter(function (r) { return r.isGroup && r.gameId === 'bluemarble'; });
     assert.equal(groups.length, 6);
     assert.deepEqual(groups.map(function (r) { return r.code; }), ['1', '2', '3', '4', '5', '6']);
     assert.ok(groups.every(function (r) { return r.capacity === 4; }));

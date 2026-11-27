@@ -166,12 +166,12 @@
       return player.pile.length ? player.pile[player.pile.length - 1] : null;
     }
 
-    /** 살아있는 플레이어들의 맨 위 공개 카드에 있는 과일별 개수 합 */
+    /** 살아있는 플레이어들의 맨 위 공개 카드에 있는 과일별 개수 합
+     *  (탈락한 플레이어의 카드도 테이블에 그대로 있으므로 함께 셈) */
     fruitCounts() {
       const counts = {};
       for (const id of FRUIT_IDS) counts[id] = 0;
       for (const p of this.players) {
-        if (p.eliminated) continue;
         const top = this.topCard(p);
         if (top) counts[top.fruit] += top.count;
       }
@@ -229,10 +229,15 @@
       player.pile.push(card);
       this.pushLog('flip', player.name + '님이 ' + fruitName(card.fruit) + ' ' + card.count + '개를 공개');
 
+      // 내 덱이 비면 그 자리에서 탈락입니다. (테이블에 올린 카드는 종을 친 사람이 가져갑니다)
+      // 이래야 턴이 한 사람에게 머물지 않고 모두에게 고르게 돌아갑니다.
+      this.recomputeEliminations();
+
       const fruits = this.bellFruits();
       const counts = this.fruitCounts();
 
-      this.advanceTurn();
+      if (this.status === 'playing') this.advanceTurn();
+      this.checkGameOver();
 
       return {
         ok: true,
@@ -328,13 +333,14 @@
     }
 
     /* ---------- 탈락/턴/종료 ---------- */
+    /** 뒤집을 카드(덱)가 떨어진 플레이어는 탈락입니다. (테이블의 공개 카드는 그대로 남습니다) */
     recomputeEliminations() {
       for (const p of this.players) {
-        const out = p.deck.length === 0 && p.pile.length === 0;
+        const out = p.deck.length === 0;
         if (out && !p.eliminated) {
           p.eliminated = true;
           if (this.outOrder.indexOf(p.id) === -1) this.outOrder.push(p.id);
-          this.pushLog('eliminate', p.name + '님 카드가 모두 떨어져 탈락!');
+          this.pushLog('eliminate', p.name + '님 내 덱의 카드를 모두 냈습니다 — 탈락!');
         }
       }
     }

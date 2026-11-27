@@ -834,6 +834,7 @@ function createHub(options) {
       botTimer: null,
       lastEvent: '대기 중',
       resultRecorded: false,
+      lastFlip: null,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       finishedAt: null
@@ -1060,10 +1061,12 @@ function createHub(options) {
 
   function broadcastOverview() {
     // 연결마다 자기 반의 방만 보냅니다. (다른 반과 섞이지 않게)
+    // 반에 묶이기 전(로비·첫 화면)에는 방 목록을 보내지 않습니다.
     for (const ws of connections) {
       if (ws.meta.room && ws.meta.role === 'player') continue;
-      const list = roomsOverview(null, ws.meta.classCode || DEFAULT_CLASS_CODE);
-      send(ws, { t: 'rooms', classCode: ws.meta.classCode || DEFAULT_CLASS_CODE, rooms: list });
+      if (!ws.meta.classCode) continue;
+      const list = roomsOverview(null, ws.meta.classCode);
+      send(ws, { t: 'rooms', classCode: ws.meta.classCode, rooms: list });
     }
   }
 
@@ -1147,7 +1150,7 @@ function createHub(options) {
     }
     if (ws.meta.room) return sendError(ws, '이미 방에 있습니다.', 'already_in_room');
 
-    const classCode = resolveClassFor(ws, msg.classCode);
+    const classCode = resolveClassFor(ws, msg.classCode, { allowDefault: true });
     if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
 
     const room = getRoom(gameModule.id, msg.code, classCode);
@@ -1170,7 +1173,15 @@ function createHub(options) {
     if (!name) return sendError(ws, '출석번호를 입력해 주세요.', 'no_name');
 
     if (room.game && room.game.status === 'playing') {
-      return sendError(ws, '이미 게임이 진행 중인 방입니다. 끝난 뒤에 입장해 주세요.', 'playing');
+      // 게임 중에 인터넷이 끊겨 다시 들어오는 친구: 같은 번호의 끊긴 자리가 있으면 그 자리를 이어받습니다.
+      const stale = number !== null ? room.seats.find(function (s) {
+        return s.number === number && (!s.ws || s.ws.readyState !== WebSocket.OPEN);
+      }) : null;
+      if (!stale) {
+        return sendError(ws, '이미 게임이 진행 중인 방입니다. 끝난 뒤에 입장해 주세요.', 'playing');
+      }
+      takeOverSeat(ws, room, stale);
+      return;
     }
     if (room.game && room.game.status === 'finished') {
       if (!resetLobby(room)) {
@@ -1178,11 +1189,19 @@ function createHub(options) {
       }
       broadcastRoom(room);
     }
+    if (number !== null) {
+      const sameNumber = room.seats.find(function (s) { return s.number === number; });
+      if (sameNumber) {
+        // 아까 쓰던 창/휴대폰이 이미 닫혔으면(끊긴 자리) 같은 번호로 다시 이어받습니다.
+        if (!sameNumber.ws || sameNumber.ws.readyState !== WebSocket.OPEN) {
+          takeOverSeat(ws, room, sameNumber);
+          return;
+        }
+        return sendError(ws, number + '번은 이미 이 방에 들어와 있습니다. 번호를 확인해 주세요.', 'dup_number');
+      }
+    }
     if (room.seats.length >= room.capacity) {
       return sendError(ws, '방이 가득 찼습니다. (' + room.capacity + '명)', 'full');
-    }
-    if (number !== null && room.seats.some(function (s) { return s.number === number; })) {
-      return sendError(ws, number + '번은 이미 이 방에 들어와 있습니다. 번호를 확인해 주세요.', 'dup_number');
     }
     if (number === null && room.seats.some(function (s) { return s.name === name; })) {
       return sendError(ws, '같은 닉네임이 이미 사용 중입니다. 다른 이름을 써 주세요.', 'dup_name');
@@ -1209,25 +1228,70 @@ function createHub(options) {
     broadcastOverview();
   }
 
-  /** 연결이 들어온 반을 정합니다. (연결에 묶인 반이 있으면 그것만 허용) */
-  function resolveClassFor(ws, requested) {
+  /** 끊긴 자리를 같은 번호의 친구가 다시 이어받습니다. (새로고침·인터넷 끊김 뒤 바로 돌아오기) */
+  function takeOverSeat(ws, room, seat) {
+    attachSeat(ws, room, seat);
+    send(ws, {
+      t: 'joined',
+      gameId: room.gameId,
+      classCode: room.classCode,
+      code: room.code,
+      token: seat.token,
+      playerId: seat.id,
+      number: seat.number,
+      studentName: seat.studentName || '',
+      name: seat.name,
+      resumed: true
+    });
+    touch(room, seat.name + '님이 다시 접속했습니다.');
+    broadcastRoom(room);
+    broadcastOverview();
+  }
+
+  /**
+   * 연결이 들어온 반을 정합니다. (연결에 묶인 반이 있으면 그것만 허용)
+   * 다른 반 코드를 보내면 null 을 돌려주어, 그 연결이 다른 반 자료를 절대 보지 못하게 합니다.
+   * options.allowDefault: 반 코드가 아예 없을 때 연습 교실(DEMO)로 묶을지 (학생 입장 요청에만 씀)
+   */
+  function resolveClassFor(ws, requested, options) {
+    const opts = options || {};
     const wanted = sanitizeClassCode(requested);
     const bound = ws.meta.classCode;
     if (bound) {
       if (wanted && wanted !== bound) return null;
       return bound;
     }
-    if (!wanted) return DEFAULT_CLASS_CODE;
+    if (!wanted) return opts.allowDefault ? bindClass(ws, DEFAULT_CLASS_CODE) : null;
     const cls = classes.get(wanted);
     if (!cls) return null;
-    ws.meta.classCode = wanted;
-    return wanted;
+    return bindClass(ws, wanted);
+  }
+
+  /**
+   * 이 연결을 반 하나에 묶습니다. (다른 반으로 옮기면 보던 방·관전·교사 권한을 먼저 정리)
+   * 한 연결이 두 반의 방을 동시에 받는 일이 없도록, 옮길 때는 반드시 거쳐 갑니다.
+   */
+  function bindClass(ws, code) {
+    const next = sanitizeClassCode(code) || DEFAULT_CLASS_CODE;
+    if (ws.meta.classCode === next) return next;
+    if (ws.meta.room) leaveRoom(ws);
+    ws.meta.room = null;
+    ws.meta.seat = null;
+    ws.meta.role = 'lobby';
+    if (ws.meta.classCode && ws.meta.classCode !== next) {
+      // 다른 반으로 넘어가면 그 반의 교사 권한은 다시 확인해야 합니다.
+      ws.meta.teacher = false;
+      ws.meta.teacherToken = null;
+    }
+    ws.meta.classCode = next;
+    return next;
   }
 
   function resumeSeat(ws, msg) {
     const gameModule = games.get(msg.gameId);
     if (!gameModule) return sendError(ws, '플레이할 수 없는 게임입니다.', 'bad_game');
-    const classCode = resolveClassFor(ws, msg.classCode) || DEFAULT_CLASS_CODE;
+    const classCode = resolveClassFor(ws, msg.classCode, { allowDefault: true });
+    if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
     const room = getRoom(gameModule.id, msg.code, classCode);
     if (!room) return sendError(ws, '이전 방을 찾을 수 없습니다.', 'no_room');
     const seat = findSeatByToken(room, msg.token);
@@ -1245,7 +1309,7 @@ function createHub(options) {
       return sendError(ws, '플레이할 수 없는 게임입니다.', 'bad_game');
     }
     if (ws.meta.room) return sendError(ws, '이미 방에 있습니다.', 'already_in_room');
-    const classCode = resolveClassFor(ws, msg.classCode);
+    const classCode = resolveClassFor(ws, msg.classCode, { allowDefault: true });
     if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
     const rawNumber = msg.number !== undefined ? msg.number : msg.studentNumber;
     const number = rawNumber !== undefined ? sanitizeNumber(rawNumber) : null;
@@ -1419,8 +1483,8 @@ function createHub(options) {
     saveClassStore();
     ws.meta.classCreates = (ws.meta.classCreates || 0) + 1;
 
+    bindClass(ws, code);
     ws.meta.teacher = true;
-    ws.meta.classCode = code;
     const token = newTeacherToken(cls);
     ws.meta.teacherToken = token;
 
@@ -1441,7 +1505,7 @@ function createHub(options) {
   function soloResultFor(ws, msg) {
     const gameId = String(msg.gameId || '');
     if (!games.solo(gameId)) return sendError(ws, '기록할 수 없는 게임입니다.', 'bad_game');
-    const classCode = resolveClassFor(ws, msg.classCode);
+    const classCode = resolveClassFor(ws, msg.classCode, { allowDefault: true });
     if (!classCode) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
     const number = sanitizeNumber(msg.number);
     if (number === null) return sendError(ws, '출석번호를 입력해 주세요.', 'bad_number');
@@ -1512,7 +1576,7 @@ function createHub(options) {
   function enterClassFor(ws, msg) {
     const cls = getClass(msg.code);
     if (!cls) return sendError(ws, '그 반 코드를 찾을 수 없습니다. 선생님께 링크를 다시 받아 주세요.', 'no_class');
-    ws.meta.classCode = cls.code;
+    bindClass(ws, cls.code);
     send(ws, { t: 'class_entered', class: classInfo(cls) });
     send(ws, { t: 'rooms', classCode: cls.code, rooms: roomsOverview(null, cls.code) });
     send(ws, { t: 'class_stats', classCode: cls.code, stats: classScoreList(cls.code) });
@@ -1545,8 +1609,8 @@ function createHub(options) {
     if (!ok) return sendError(ws, '교사 비밀번호가 맞지 않습니다.', 'bad_pin');
 
     ws.meta.failedPin = 0;
+    bindClass(ws, cls.code);
     ws.meta.teacher = true;
-    ws.meta.classCode = cls.code;
     const token = newTeacherToken(cls);
     ws.meta.teacherToken = token;
     send(ws, { t: 'class_auth_ok', class: classInfo(cls), teacherToken: token });
@@ -1668,13 +1732,21 @@ function createHub(options) {
 
     switch (msg.t) {
       case 'hello': {
-        send(ws, { t: 'welcome', games: games.list(), rooms: roomsOverview(), serverTime: Date.now() });
+        send(ws, {
+          t: 'welcome',
+          games: games.list(),
+          // 연결이 반에 묶이기 전에는 다른 반 방 목록을 절대 보내지 않습니다.
+          rooms: ws.meta.classCode ? roomsOverview(null, ws.meta.classCode) : [],
+          classCode: ws.meta.classCode || null,
+          serverTime: Date.now()
+        });
         return;
       }
       case 'classCreate':
         return createClassFor(ws, msg);
       case 'classStats': {
-        const code = resolveClassFor(ws, msg.code) || DEFAULT_CLASS_CODE;
+        const code = resolveClassFor(ws, msg.code);
+        if (!code) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
         send(ws, { t: 'class_stats', classCode: code, stats: classScoreList(code), serverTime: Date.now() });
         return;
       }
@@ -1691,7 +1763,8 @@ function createHub(options) {
       case 'overview': {
         overviewSubs.add(ws);
         if (!ws.meta.room) ws.meta.role = 'teacher';
-        const code = resolveClassFor(ws, msg.classCode) || DEFAULT_CLASS_CODE;
+        const code = resolveClassFor(ws, msg.classCode);
+        if (!code) return sendError(ws, '반 코드를 확인해 주세요.', 'no_class');
         const list = roomsOverview(msg.gameId || null, code);
         send(ws, { t: 'rooms', gameId: msg.gameId || null, classCode: code, rooms: list });
         return;
@@ -1838,6 +1911,26 @@ function createHub(options) {
         if (!room) return sendError(ws, '방에 입장해야 합니다.', 'no_room');
         if (!seat) return sendError(ws, '관전자는 게임에 참여할 수 없습니다.', 'spectator');
         if (!room.game) return sendError(ws, '게임이 시작되지 않았습니다.', 'no_game');
+        // 같은 자리로 다시 접속했다면 옛 창(정지된 탭)에서는 주문을 받지 않습니다.
+        // (옛 창과 새 창이 동시에 카드를 내는 일을 막습니다)
+        if (seat.ws && seat.ws !== ws) {
+          return sendError(ws, '다른 창에서 이어서 접속했습니다. 이 창은 새로고침해 주세요.', 'replaced');
+        }
+        // 같은 사람이 아주 짧은 순간에 같은 동작을 두 번 보내는 것(더블클릭·매크로)을 막습니다.
+        // 정상적인 카드 뒤집기는 0.12초 안에 두 번 나올 수 없습니다.
+        if (String(msg.action) === 'flip') {
+          const now = Date.now();
+          const last = room.lastFlip;
+          if (last && last.seatId === seat.id && now - last.at < 120) {
+            return send(ws, {
+              t: 'action_result',
+              ok: false,
+              reason: 'too_fast',
+              message: '너무 빨라요. 카드가 뒤집힌 것을 확인하고 눌러 주세요.'
+            });
+          }
+          room.lastFlip = { seatId: seat.id, at: now };
+        }
         const result = room.gameModule.applyAction(room.game, seat.id, msg.action, msg.payload, Date.now());
         if (!result || !result.ok) {
           return send(ws, {
@@ -1954,8 +2047,9 @@ function createHub(options) {
     send(ws, {
       t: 'welcome',
       games: games.list(),
-      rooms: roomsOverview(null, DEFAULT_CLASS_CODE),
-      classCode: DEFAULT_CLASS_CODE,
+      // 반에 묶이기 전에는 방 목록을 보내지 않습니다. (다른 반 방·알림이 섞이지 않게)
+      rooms: [],
+      classCode: null,
       serverTime: Date.now()
     });
 
@@ -1984,7 +2078,7 @@ function createHub(options) {
       ws.isAlive = false;
       try { ws.ping(); } catch (err) { /* ignore */ }
     });
-  }, 30000);
+  }, 20000);
   if (heartbeat.unref) heartbeat.unref();
 
   initRooms();

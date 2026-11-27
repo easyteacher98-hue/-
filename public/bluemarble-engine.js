@@ -885,9 +885,9 @@
   /* ---------------- AI 봇 ---------------- */
 
   const BOT_PROFILES = {
-    easy: { label: '쉬움', delay: [900, 1500], buyRatio: 1.9, buildReserve: 300000 },
-    normal: { label: '보통', delay: [600, 1100], buyRatio: 1.5, buildReserve: 220000 },
-    hard: { label: '어려움', delay: [380, 800], buyRatio: 1.2, buildReserve: 150000 }
+    easy: { label: '쉬움', delay: [1500, 2300], buyRatio: 1.9, buildReserve: 300000 },
+    normal: { label: '보통', delay: [1200, 1900], buyRatio: 1.5, buildReserve: 220000 },
+    hard: { label: '어려움', delay: [900, 1500], buyRatio: 1.2, buildReserve: 150000 }
   };
 
   const BOT_NAMES = ['주사위왕', '건물부자', '도시탐험가', '호텔사장', '별장지기', '마블여행자'];

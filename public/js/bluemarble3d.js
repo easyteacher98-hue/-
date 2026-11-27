@@ -759,7 +759,7 @@
         steps: distance,
         step: 0,
         startedAt: performance.now(),
-        stepMs: distance > 10 ? 90 : 140,
+        stepMs: distance > 10 ? 120 : 185,
         offset: offset || { x: 0, z: 0 }
       };
       // 14칸 넘게 움직이면(무인도로 이동 등) 순간이동
@@ -816,7 +816,7 @@
       const now = performance.now();
       this.dice.anim = {
         startedAt: now,
-        duration: 1050,
+        duration: 1250,
         values: [lastRoll.a, lastRoll.b],
         startRot: [self.dice.a.rotation.clone(), self.dice.b.rotation.clone()],
         targets: [self.faceQuaternion(lastRoll.a), self.faceQuaternion(lastRoll.b)],
@@ -873,6 +873,11 @@
     }
 
     /* ----- 애니메이션 루프 ----- */
+
+    /** 말이 걷거나 주사위가 구르는 중인지 (화면 갱신을 잠깐 미룰 때 씁니다) */
+    isBusy() {
+      return this.tokenWalk.size > 0 || !!(this.dice && this.dice.anim);
+    }
 
     animate() {
       if (this.disposed) return;

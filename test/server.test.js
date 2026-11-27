@@ -95,7 +95,11 @@ test('6개 모둠 방이 열려 있고, 입장 → 준비 → 시작 → 뒤집�
     const a = await connect(env.ws);
     clients.push(a);
     const welcome = await a.next('welcome');
-    const groups = welcome.rooms.filter(function (r) { return r.isGroup && r.gameId === 'halligalli'; });
+    // 연결 직후에는 다른 반(연습 교실 포함) 방 목록을 보내지 않습니다. 연습 교실은 명시적으로 고릅니다.
+    assert.deepEqual(welcome.rooms, []);
+    a.send({ t: 'overview', gameId: 'halligalli', classCode: 'DEMO' });
+    const demo = await a.next(function (m) { return m.t === 'rooms' && m.classCode === 'DEMO'; });
+    const groups = demo.rooms.filter(function (r) { return r.isGroup && r.gameId === 'halligalli'; });
     assert.equal(groups.length, 6);
     assert.deepEqual(groups.map(function (r) { return r.code; }), ['1', '2', '3', '4', '5', '6']);
     assert.equal(groups[0].capacity, 4);
@@ -201,7 +205,7 @@ test('교사 관전: 6개 모둠 요약을 받고, 관전자는 게임에 참여
     const teacher = await connect(env.ws);
     clients.push(teacher);
     await teacher.next('welcome');
-    teacher.send({ t: 'overview', gameId: 'halligalli' });
+    teacher.send({ t: 'overview', gameId: 'halligalli', classCode: 'DEMO' });
     const rooms = await teacher.next('rooms');
     assert.equal(rooms.rooms.length, 6);
     const room2 = rooms.rooms.find(function (r) { return r.code === '2'; });
@@ -376,7 +380,7 @@ test('게임 중 방 나가기: 자리가 사라지고, 남은 사람이 없으�
     const overview = await connect(env.ws);
     clients.push(overview);
     await overview.next('welcome');
-    overview.send({ t: 'overview', gameId: 'halligalli' });
+    overview.send({ t: 'overview', gameId: 'halligalli', classCode: 'DEMO' });
     const rooms = await overview.next('rooms');
     const room6 = rooms.rooms.find(function (r) { return r.code === '6'; });
     assert.equal(room6.status, 'waiting');
@@ -497,7 +501,7 @@ test('교사가 진행 중인 모둠 방을 초기화하면 참가자가 정리�
     const teacher = await connect(env.ws);
     clients.push(teacher);
     await teacher.next('welcome');
-    teacher.send({ t: 'overview', gameId: 'halligalli' });
+    teacher.send({ t: 'overview', gameId: 'halligalli', classCode: 'DEMO' });
     const rooms = await teacher.next('rooms');
     assert.equal(rooms.rooms.find(function (r) { return r.code === '3'; }).status, 'playing');
 

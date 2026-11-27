@@ -134,6 +134,9 @@ test('번호로 모둠 방에 입장하고, 봇을 추가해 시작하면 2D 대
 
     assert.match(window.document.body.textContent, /전국여행 마블/);
     assert.match(window.document.body.textContent, /더블 = 한 번 더/);
+    await waitFor(function () {
+      return window.document.querySelectorAll('.group-card').length === 6;
+    }, '1~6모둠 방 목록');
     assert.equal(window.document.querySelectorAll('.group-card').length, 6, '1~6모둠 방');
     assert.ok(window.document.querySelector('[data-action="bm.rules"]'), '규칙 버튼');
     assert.ok(window.document.querySelector('[data-action="bm.bot"]'), 'AI 봇 연습');

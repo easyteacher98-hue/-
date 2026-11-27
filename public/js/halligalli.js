@@ -24,6 +24,9 @@
     fx: { lastBellAt: null, freshAt: null, soundAt: null, kind: 'correct' },
     bot: { active: false, game: null, driver: null, timer: null, level: 'normal', count: 4 },
     teacherBound: false,
+    flipPending: false,
+    flipTimer: null,
+    rejoinTried: false,
     stats: [],
     lastResult: null,
     resultShown: {}
@@ -176,7 +179,7 @@
         '<li>테이블에 보이는 <b>모든 사람의 맨 위 카드</b>를 보고, 어떤 과일이든 <b>정확히 5개</b>가 되면 종을 칩니다.</li>' +
         '<li>가장 먼저 종을 친 사람이 <b>테이블에 공개된 카드를 모두</b> 가져갑니다.</li>' +
         '<li>5개가 아닌데 종을 치면, <b>다른 모든 플레이어에게 내 카드 1장씩</b> 줘야 합니다.</li>' +
-        '<li>카드가 모두 떨어지면 탈락! 마지막까지 남은 사람이 우승합니다.</li>' +
+        '<li>내 덱의 카드를 모두 내면 탈락! 마지막까지 남은 사람이 우승합니다.</li>' +
       '</ol>' +
       '<h3>조작 방법</h3>' +
       '<p>종은 화면 가운데 <b>🔔 종 버튼</b> 또는 <b>스페이스바</b>, 카드 뒤집기는 <b>카드 뒤집기 버튼</b> 또는 <b>F 키</b>입니다.<br>' +
@@ -251,7 +254,12 @@
       return;
     }
     BG.net.connect();
-    const groups = S.rooms.filter(function (r) { return r.gameId === 'halligalli'; });
+    if (BG.requestRooms) BG.requestRooms('halligalli');
+    const loadedGroups = S.rooms.filter(function (r) { return r.gameId === 'halligalli'; });
+    // 서버 목록이 도착하기 전에는 1~6모둠 카드를 먼저 보여 줍니다. (누르면 바로 입장)
+    const groups = loadedGroups.length || !BG.net.connected
+      ? loadedGroups
+      : (BG.placeholderRooms ? BG.placeholderRooms('halligalli', 4) : []);
     const groupCards = groups.length
       ? groups.map(groupCard).join('')
       : '<div class="empty">모둠 방 정보를 불러오는 중입니다…<br>서버가 꺼져 있다면 아래 <b>AI 봇과 연습</b>을 이용해 주세요.</div>';
@@ -1306,6 +1314,16 @@
       renderBot();
       return;
     }
+    // 내 차례가 아니거나, 이미 뒤집기 요청을 보내 서버 응답을 기다리는 중이면 무시합니다.
+    // (더블클릭·키 연타로 요청이 두 번 나가는 것을 막습니다)
+    const game = S.room && S.room.game;
+    const me = game && game.players ? game.players.find(function (p) { return p.id === S.room.youId; }) : null;
+    if (S.room && S.room.role === 'player' && (!game || game.status !== 'playing' || !me || !me.isTurn)) return;
+    if (S.flipPending) return;
+    S.flipPending = true;
+    clearTimeout(S.flipTimer);
+    // 응답이 오지 않아도(연결이 끊긴 경우) 화면이 잠기지 않게 풀어 줍니다.
+    S.flipTimer = setTimeout(function () { S.flipPending = false; }, 1800);
     if (BG.sound) BG.sound.flip();
     BG.net.send({ t: 'action', action: 'flip' });
   };
@@ -1530,11 +1548,15 @@
   });
 
   BG.net.on('welcome', function (msg) {
+    if (msg && msg.classCode && msg.classCode !== BG.state.classCode) return;
     S.rooms = (msg.rooms || []).filter(function (r) { return r.gameId === 'halligalli'; });
     refreshRoomList();
   });
 
   BG.net.on('rooms', function (msg) {
+    if (!msg) return;
+    // 다른 반 방 목록(반 코드가 다른 메시지)은 그리지 않습니다.
+    if (msg.classCode && msg.classCode !== BG.state.classCode) return;
     S.rooms = (msg.rooms || []).filter(function (r) { return r.gameId === 'halligalli'; });
     refreshRoomList();
   });
@@ -1545,6 +1567,7 @@
     const expected = !!(msg.created || msg.resumed || S.pendingJoin === msg.code);
     S.pendingJoin = null;
     S.resumeSent = {};
+    S.rejoinTried = false;
     if (!expected) {
       S.room = null;
       BG.state.roomView = null;
@@ -1566,6 +1589,9 @@
     S.room = msg.room;
     S.role = msg.room.role;
     BG.state.roomView = msg.room;
+    // 서버가 새 상태를 보내 왔으니 다음 카드 뒤집기를 받을 준비를 합니다.
+    S.flipPending = false;
+    clearTimeout(S.flipTimer);
     if (msg.room.game) playBellSound(msg.room.game);
     const path = BG.currentPath();
     if (path.indexOf('/halligalli/room/') === 0) renderRoom([msg.room.code]);
@@ -1612,6 +1638,7 @@
   });
 
   BG.net.on('action_result', function (msg) {
+    if (msg && msg.ok === false) S.flipPending = false;
     if (msg && msg.ok === false && msg.message) BG.ui.toast(msg.message, 'error');
     else if (msg && msg.ok === true && msg.message) BG.ui.toast(msg.message, 'ok');
   });
@@ -1632,6 +1659,15 @@
       return;
     }
     if (code === 'bad_pin' && screenName() === 'hg.teacher') return;
+    if ((code === 'no_seat' || code === 'no_room') && !S.rejoinTried) {
+      // 서버가 잠깐 새로 켜져 자리를 잃었을 때: 같은 번호로 바로 다시 들어가 봅니다.
+      const seat = getSeat();
+      const path = BG.currentPath();
+      if (seat && seat.code && path.indexOf('/halligalli/room/' + seat.code) === 0) {
+        S.rejoinTried = true;
+        if (BG.tryRejoin && BG.tryRejoin('halligalli', seat.code)) return;
+      }
+    }
     if (['no_seat', 'no_room', 'no_name', 'full', 'playing', 'dup_name', 'dup_number', 'bad_number', 'already_in_room'].indexOf(code) !== -1) {
       clearSeat();
       S.pendingJoin = null;
