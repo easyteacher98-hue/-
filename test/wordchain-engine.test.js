@@ -215,4 +215,10 @@ test('끝말잇기: stateFor 는 남은 시간·목숨·낱말 수·화면 상�
   assert.match(game.reasonText('not_in_dictionary'), /사전/);
   assert.match(game.reasonText('too_short'), /2글자/);
   assert.match(game.reasonText('duplicate'), /이미 나온/);
+  // 받침에 맞는 조사(로/으로)를 쓴다: 방 → 으로, 과 → 로
+  assert.equal(WC.roJosa('방'), '으로');
+  assert.equal(WC.roJosa('과'), '로');
+  const log2 = game2();
+  log2.say('a', { text: '가방' });
+  assert.match(log2.log[log2.log.length - 1].text, /“방”으로 시작하는 낱말/);
 });

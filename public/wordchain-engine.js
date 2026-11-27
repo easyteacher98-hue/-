@@ -98,6 +98,13 @@
     });
   });
 
+  /** 받침에 따라 '로 / 으로' 를 고릅니다. (점→으로, 과→로) */
+  function roJosa(ch) {
+    const code = ch ? ch.charCodeAt(0) - 0xac00 : -1;
+    const hasFinal = code >= 0 && code <= 11171 && code % 28 !== 0;
+    return hasFinal ? '으로' : '로';
+  }
+
   function lastSyllable(word) {
     return word ? word.charAt(word.length - 1) : '';
   }
@@ -307,7 +314,7 @@
     const ended = this.checkEnd() || this.checkStuck();
     if (!ended) {
       const next = this.currentPlayer();
-      if (next) this.pushLog(next.name + '님 차례입니다. (“' + nextRequired + '”로 시작하는 낱말)');
+      if (next) this.pushLog(next.name + '님 차례입니다. (“' + nextRequired + '”' + roJosa(nextRequired) + ' 시작하는 낱말)');
     }
     return { ok: true, word: text, next: nextRequired, finished: this.status === 'finished' };
   };
@@ -481,6 +488,7 @@
     splitSyllable: splitSyllable,
     startKey: startKey,
     sameSound: sameSound,
+    roJosa: roJosa,
     followers: followers,
     leavesFollowUp: leavesFollowUp,
     isPlayable: isPlayable,
