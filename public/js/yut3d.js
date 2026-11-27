@@ -30,7 +30,7 @@
         halfW: 9.6,
         halfD: 6.2,
         mat: { x: 9.2, z: -0.2, w: 6.4, h: 2.6 },
-        sticks: { x0: 9.2 - 2.1, dx: 1.4, z: -0.2 },
+        sticks: { x0: 6.8, dx: 1.6, z: -0.2 },
         sticksZ: 0
       };
     }
@@ -40,7 +40,7 @@
       halfW: 6.4,
       halfD: 9.0,
       mat: { x: 0, z: 7.7, w: 6.6, h: 2.4 },
-      sticks: { x0: -2.1, dx: 1.4, z: 7.7 },
+      sticks: { x0: -2.4, dx: 1.6, z: 7.7 },
       sticksZ: 7.7
     };
   }
@@ -130,9 +130,9 @@
     roundRectPath(ctx, inset, inset, inner, inner, 30);
     ctx.clip();
     const felt = ctx.createRadialGradient(size * 0.44, size * 0.38, size * 0.05, size * 0.5, size * 0.5, size * 0.74);
-    felt.addColorStop(0, '#fffdf6');
-    felt.addColorStop(0.62, '#fdf4e2');
-    felt.addColorStop(1, '#f5e3c6');
+    felt.addColorStop(0, '#fff9ec');
+    felt.addColorStop(0.62, '#fbeed8');
+    felt.addColorStop(1, '#f2ddbb');
     ctx.fillStyle = felt;
     ctx.fillRect(inset, inset, inner, inner);
     // 펠트 결 (아주 옅은 점)
@@ -234,22 +234,22 @@
       // 알맹이 (위에서 빛이 드는 느낌)
       const g = ctx.createRadialGradient(p.x - r * 0.35, p.y - r * 0.45, r * 0.15, p.x, p.y, r);
       g.addColorStop(0, '#ffffff');
-      g.addColorStop(0.45, style.light || '#fff6e4');
-      g.addColorStop(1, style.fill || '#f6ddb6');
+      g.addColorStop(0.45, style.light || '#fff2d8');
+      g.addColorStop(1, style.fill || '#f6d6a3');
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.fillStyle = g;
       ctx.fill();
       // 링
       ctx.beginPath();
-      ctx.arc(p.x, p.y, r - 6, 0, Math.PI * 2);
-      ctx.strokeStyle = style.ring || 'rgba(206,160,104,0.55)';
-      ctx.lineWidth = 4;
+      ctx.arc(p.x, p.y, r - 7, 0, Math.PI * 2);
+      ctx.strokeStyle = style.ring || 'rgba(196,142,82,0.72)';
+      ctx.lineWidth = 5;
       ctx.stroke();
     };
 
-    const chipR = 26;
-    const bigR = 38;
+    const chipR = 30;
+    const bigR = 44;
     Object.keys(nodePos).forEach(function (key) {
       const node = Number(key);
       const p = toPx(nodePos[key]);
@@ -294,19 +294,32 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const start = toPx(nodePos[0]);
-    ctx.font = '900 22px "IBM Plex Sans KR", sans-serif';
+    // 출발 글자는 말판 안쪽(가운데 방향)에 놓습니다.
+    const toCenterX = start.x < size / 2 ? 1 : -1;
+    const toCenterY = start.y < size / 2 ? 1 : -1;
+    ctx.font = '900 27px "IBM Plex Sans KR", sans-serif';
     ctx.fillStyle = '#2f7d58';
-    ctx.fillText('출발', start.x, start.y + bigR + 26);
+    ctx.fillText('출발', start.x + toCenterX * (bigR + 33), start.y + toCenterY * (bigR + 12));
 
     const mid = toPx(nodePos[20]);
-    ctx.font = '900 24px "IBM Plex Sans KR", sans-serif';
+    ctx.font = '900 28px "IBM Plex Sans KR", sans-serif';
     ctx.fillStyle = 'rgba(160,108,40,0.9)';
     ctx.fillText('가운데', mid.x, mid.y - bigR - 22);
 
     /* 6) 프레임 명판 */
-    ctx.font = '700 24px "IBM Plex Sans KR", sans-serif';
-    ctx.fillStyle = 'rgba(255,247,232,0.72)';
-    ctx.fillText('보드게임천국 · 윷놀이', size / 2, size - inset / 2 + 2);
+    const plateW = 300;
+    const plateH = 62;
+    const plateX = size / 2 - plateW / 2;
+    const plateY = size - inset / 2 - plateH / 2 + 2;
+    ctx.fillStyle = 'rgba(255,248,234,0.92)';
+    roundRectPath(ctx, plateX, plateY, plateW, plateH, 20);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(160,110,60,0.28)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.font = '900 32px "IBM Plex Sans KR", sans-serif';
+    ctx.fillStyle = '#9a6634';
+    ctx.fillText('전통 윷놀이', size / 2, plateY + plateH / 2 + 1);
 
     // 프레임 장식 나사
     [[46, 46], [size - 46, 46], [46, size - 46], [size - 46, size - 46]].forEach(function (pos) {
@@ -384,7 +397,7 @@
       // 말판+윷가락 자리가 화면 안에 다 들어오도록 거리를 잡습니다.
       const rH = layout.halfD / tan;
       const rW = layout.halfW / (tan * aspect);
-      view.radius = Math.max(rH, rW) * 1.04;
+      view.radius = Math.max(rH, rW) * 0.96;
       const sinPhi = Math.sin(view.phi);
       camera.position.set(
         layout.target.x + view.radius * sinPhi * Math.sin(view.theta),
@@ -499,7 +512,7 @@
     for (let i = 0; i < 4; i++) {
       const group = new THREE.Group();
       const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.17, 0.17, 1.28, 18, 1, false, 0, Math.PI),
+        new THREE.CylinderGeometry(0.19, 0.19, 1.42, 20, 1, false, 0, Math.PI),
         new THREE.MeshLambertMaterial({ color: stickColors[i] })
       );
       body.rotation.z = Math.PI / 2;
@@ -508,16 +521,16 @@
 
       // 납작한 면(배) — 흰 칠
       const flat = new THREE.Mesh(
-        new THREE.BoxGeometry(1.26, 0.05, 0.3),
+        new THREE.BoxGeometry(1.4, 0.05, 0.34),
         new THREE.MeshLambertMaterial({ color: '#fffaf0' })
       );
       flat.position.set(0, -0.06, 0);
       group.add(flat);
 
       // 양 끝 붉은 띠 (전통 윷가락 느낌)
-      [-0.56, 0.56].forEach(function (x) {
+      [-0.62, 0.62].forEach(function (x) {
         const band = new THREE.Mesh(
-          new THREE.BoxGeometry(0.06, 0.3, 0.3),
+          new THREE.BoxGeometry(0.07, 0.34, 0.34),
           new THREE.MeshLambertMaterial({ color: '#c9503f' })
         );
         band.position.set(x, -0.01, 0);
