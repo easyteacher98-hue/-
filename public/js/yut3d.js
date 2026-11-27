@@ -868,7 +868,7 @@
     const HOP_HEIGHT = 0.5;  // 통통 튀는 높이
 
     function nodeOf(pos) {
-      const path = PATHS[pos.path];
+      const path = paths[pos.path];
       return path ? path[pos.idx] : undefined;
     }
 
@@ -1004,11 +1004,11 @@
           let hops = null;
           let hideAfter = false;
           if (kind === 'board') {
-            hops = walkPath(PATHS, fromPos, pos, false);
+            hops = walkPath(paths, fromPos, pos, false);
             if (!hops || !hops.length) hops = [pos];
           } else if (kind === 'finished') {
             // 완주: 마지막 자리(출발점)까지 밟고 간 뒤 사라집니다.
-            hops = walkPath(PATHS, fromPos, null, true) || [];
+            hops = walkPath(paths, fromPos, null, true) || [];
             hideAfter = true;
           } else if (fromPos) {
             // 잡히거나 빽도로 출발점에 돌아감: 출발점까지 한 칸 물러섭니다.
