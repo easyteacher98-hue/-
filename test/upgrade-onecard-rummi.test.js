@@ -57,6 +57,9 @@ test('컬러 숫자 카드: 덱과 상태에 +4 카드가 들어 있다', functi
   assert.equal(OneCard.isWildType({ type: 'draw4' }), true);
   assert.equal(OneCard.isWildType({ type: 'wild' }), true);
   assert.equal(OneCard.isWildType({ type: 'skip' }), false);
+  // 연습 모드에서도 규칙 안내가 그대로 보이도록 엔진에 안내 문구가 있습니다.
+  const game = new OneCard.Game([{ id: 'a', name: '가' }, { id: 'b', name: '나' }], { seed: 22 });
+  assert.match(game.reasonText('cannot_play'), /같은 색|같은 숫자/);
 });
 
 /* ---------------- 컬러 숫자 카드: 원카드! ---------------- */

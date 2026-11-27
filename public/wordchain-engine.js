@@ -30,6 +30,22 @@
 
   const INITIALS = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
 
+  const REASON_TEXT = {
+    not_playing: '게임이 진행 중이 아닙니다.',
+    unknown_player: '플레이어를 찾을 수 없습니다.',
+    not_your_turn: '아직 내 차례가 아닙니다.',
+    eliminated: '탈락해서 낼 수 없습니다. 친구들의 게임을 지켜봐 주세요.',
+    empty_word: '낱말을 입력해 주세요.',
+    one_word_only: '한 낱말만 입력해 주세요. (띄어쓰기 없이)',
+    hangul_only: '한글로 된 우리말 낱말만 입력할 수 있어요.',
+    too_short: '2글자 이상인 낱말만 이을 수 있어요.',
+    too_long: '10글자까지의 낱말만 이을 수 있어요.',
+    wrong_start: '앞 낱말의 끝 글자로 시작해야 해요.',
+    not_in_dictionary: '사전에 없는 낱말이에요. 진짜 우리말 낱말로 다시 말해 주세요.',
+    duplicate: '이미 나온 낱말이에요. 다른 낱말을 말해 주세요.',
+    last_word: '한방 단어는 사용할 수 없어요! 다음 사람이 이어 말할 수 있는 낱말로 다시 말해 주세요.'
+  };
+
   /* ---------------- 사전 ---------------- */
 
   const WORDS = (WORD_MOD && WORD_MOD.words ? WORD_MOD.words : []).slice();
@@ -208,6 +224,11 @@
 
   Game.prototype.finishGame = function (reason) {
     this.finish(reason || 'closed_by_host', null);
+  };
+
+  /** 화면(연습 모드)에서도 같은 안내 문구를 쓸 수 있게 엔진에 둡니다. */
+  Game.prototype.reasonText = function (reason) {
+    return REASON_TEXT[reason] || '지금은 할 수 없어요.';
   };
 
   /** 살아 있는 사람이 한 명뿐이거나, 낱말 수를 다 채웠으면 끝냅니다. */
@@ -454,6 +475,7 @@
     TURN_CHOICES: TURN_CHOICES,
     MAX_TURNS: MAX_TURNS,
     BOT_NAMES: BOT_NAMES,
+    REASON_TEXT: REASON_TEXT,
     WORDS: WORDS,
     WORD_COUNT: WORD_SET.size,
     splitSyllable: splitSyllable,

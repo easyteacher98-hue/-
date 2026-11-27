@@ -19,6 +19,16 @@
   const TYPE_NAMES = { number: '숫자', skip: '점프', reverse: '방향전환', draw2: '+2 공격', wild: '색 바꾸기', draw4: '무지개 +4' };
   const BOT_NAMES = ['카드봇 별이', '카드봇 솔이', '카드봇 보라', '카드봇 초코'];
 
+  const REASON_TEXT = {
+    not_playing: '게임이 진행 중이 아닙니다.',
+    unknown_player: '플레이어를 찾을 수 없습니다.',
+    not_your_turn: '아직 내 차례가 아닙니다.',
+    no_card: '내 손에 없는 카드입니다.',
+    cannot_play: '같은 색이거나 같은 숫자(또는 같은 특수 카드)만 낼 수 있습니다.',
+    need_color: '색 바꾸기 카드는 바꿀 색을 골라야 합니다.',
+    too_many_cards: '카드가 1장 남을 때 원카드! 를 외칠 수 있어요.'
+  };
+
   function makeRng(seed) {
     let s = (Number(seed) || 1) >>> 0;
     return function () {
@@ -365,8 +375,12 @@
     };
   };
 
-  /* ---------------- AI 봇 ---------------- */
+  /** 화면(연습 모드)에서도 같은 안내 문구를 쓸 수 있게 엔진에 둡니다. */
+  Game.prototype.reasonText = function (reason) {
+    return REASON_TEXT[reason] || '지금은 할 수 없어요.';
+  };
 
+  /* ---------------- AI 봇 ---------------- */
   function botAction(game, player) {
     // 카드가 2장이면 먼저 '원카드!' 를 외칩니다. (우노식 재미)
     if (player.hand.length <= 2 && !game.called[player.id]) return { action: 'say', payload: {} };

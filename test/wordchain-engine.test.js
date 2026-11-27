@@ -193,7 +193,7 @@ test('끝말잇기: 봇끼리 끝까지 두고 순위가 정해진다 (봇은 �
   assert.equal(game.players.every(function (p) { return p.lives <= 3; }), true);
 });
 
-test('끝말잇기: stateFor 는 남은 시간·목숨·낱말 수·화면 상태를 담아 보낸다', function () {
+test('끝말잇기: stateFor 는 남은 시간·목숨·낱말 수·화면 상태를 담아 보내고, 거절 안내가 친절하다', function () {
   const game = game2();
   game.say('a', { text: '사과' });
   const state = game.stateFor('b');
@@ -209,4 +209,10 @@ test('끝말잇기: stateFor 는 남은 시간·목숨·낱말 수·화면 상�
   assert.ok(state.players.every(function (p) { return typeof p.lives === 'number'; }));
   assert.ok(state.optionsCount > 0);
   assert.equal(state.status, 'playing');
+
+  // 연습 모드에서도 같은 안내가 보이도록 엔진이 거절 이유를 글로 돌려줍니다.
+  assert.match(game.reasonText('last_word'), /한방/);
+  assert.match(game.reasonText('not_in_dictionary'), /사전/);
+  assert.match(game.reasonText('too_short'), /2글자/);
+  assert.match(game.reasonText('duplicate'), /이미 나온/);
 });
