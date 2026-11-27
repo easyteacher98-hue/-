@@ -26,7 +26,7 @@
     if (aspect >= 1.35) {
       return {
         wide: true,
-        target: { x: 2.9, z: 0 },
+        target: { x: 2.9, z: 0.8 },
         halfW: 9.6,
         halfD: 6.2,
         mat: { x: 9.2, z: -0.2, w: 6.4, h: 2.6 },
@@ -294,17 +294,31 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const start = toPx(nodePos[0]);
-    // 출발 글자는 말판 안쪽(가운데 방향)에 놓습니다.
+    // 출발 글자는 말판 안쪽(가운데 방향)에 작은 이름표로 놓습니다.
     const toCenterX = start.x < size / 2 ? 1 : -1;
     const toCenterY = start.y < size / 2 ? 1 : -1;
+    const startLabelX = start.x + toCenterX * (bigR + 52);
+    const startLabelY = start.y + toCenterY * (bigR + 16);
+    ctx.fillStyle = 'rgba(255,253,246,0.94)';
+    roundRectPath(ctx, startLabelX - 48, startLabelY - 23, 96, 46, 23);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(79,176,131,0.65)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
     ctx.font = '900 27px "IBM Plex Sans KR", sans-serif';
     ctx.fillStyle = '#2f7d58';
-    ctx.fillText('출발', start.x + toCenterX * (bigR + 33), start.y + toCenterY * (bigR + 12));
+    ctx.fillText('출발', startLabelX, startLabelY + 1);
 
     const mid = toPx(nodePos[20]);
-    ctx.font = '900 28px "IBM Plex Sans KR", sans-serif';
-    ctx.fillStyle = 'rgba(160,108,40,0.9)';
-    ctx.fillText('가운데', mid.x, mid.y - bigR - 22);
+    ctx.fillStyle = 'rgba(255,253,246,0.9)';
+    roundRectPath(ctx, mid.x - 58, mid.y - bigR - 50, 116, 44, 22);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(224,165,58,0.6)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.font = '900 26px "IBM Plex Sans KR", sans-serif';
+    ctx.fillStyle = 'rgba(170,114,42,0.95)';
+    ctx.fillText('가운데', mid.x, mid.y - bigR - 27);
 
     /* 6) 프레임 명판 */
     const plateW = 300;
