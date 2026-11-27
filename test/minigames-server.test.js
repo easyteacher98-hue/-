@@ -300,19 +300,24 @@ test('전통 윷놀이: 윷가락을 던지고 말을 옮길 수 있으며, 말 
 
     const hostId = playing.room.youId;
     host.send({ t: 'action', action: 'throw' });
+    // 빽도가 나오고 보드에 말이 없으면 바로 차례가 넘어갑니다(throwInfo 없음).
+    // 둘 다 정상이므로, 윷가락을 던진 결과(throwInfo)나 차례가 바뀐 것을 기다립니다.
     const thrown = await host.next(function (m) {
-      return m.t === 'room' && m.room.gameId === 'yut' && m.room.game && m.room.game.throwInfo;
+      return m.t === 'room' && m.room.gameId === 'yut' && m.room.game &&
+        (m.room.game.throwInfo || m.room.game.turnPlayerId !== hostId);
     });
-    assert.ok(['도', '개', '걸', '윷', '모', '빽도'].indexOf(thrown.room.game.throwInfo.name) !== -1);
-    const steps = thrown.room.game.throwInfo.steps;
-    if (steps > 0) {
-      assert.equal(thrown.room.game.phase, 'move');
-      const myPiece = thrown.room.game.players.find(function (p) { return p.id === hostId; }).pieces[0];
-      host.send({ t: 'action', action: 'move', payload: { pieceId: myPiece.id } });
-      const moved = await host.next(function (m) {
-        return m.t === 'room' && m.room.gameId === 'yut' && m.room.game && m.room.game.lastMove;
-      });
-      assert.ok(moved.room.game.lastMove.node !== null || moved.room.game.lastMove.finished);
+    if (thrown.room.game.throwInfo) {
+      assert.ok(['도', '개', '걸', '윷', '모', '빽도'].indexOf(thrown.room.game.throwInfo.name) !== -1);
+      const steps = thrown.room.game.throwInfo.steps;
+      if (steps > 0) {
+        assert.equal(thrown.room.game.phase, 'move');
+        const myPiece = thrown.room.game.players.find(function (p) { return p.id === hostId; }).pieces[0];
+        host.send({ t: 'action', action: 'move', payload: { pieceId: myPiece.id } });
+        const moved = await host.next(function (m) {
+          return m.t === 'room' && m.room.gameId === 'yut' && m.room.game && m.room.game.lastMove;
+        });
+        assert.ok(moved.room.game.lastMove.node !== null || moved.room.game.lastMove.finished);
+      }
     }
     assert.ok(true);
   } finally {

@@ -318,7 +318,8 @@
     const myPlayer = state.players.find(function (p) { return p.id === me; });
     const myTurn = state.status === 'playing' && state.turnPlayerId === me;
     const Y = window.Yut;
-    const throwSeq = state.throwInfo ? state.throwInfo.seq : 0;
+    const shownThrow = state.throwInfo || state.lastThrow || null;
+    const throwSeq = shownThrow ? shownThrow.seq : 0;
     const tossNow = !!throwSeq && throwSeq !== yutUI.throwSeq;
     if (throwSeq) yutUI.throwSeq = throwSeq;
 
@@ -382,7 +383,7 @@
 
     return '<div class="mg-board mg-yut">' +
       '<div class="mg-turn-bar ' + (myTurn ? 'is-me' : '') + '">' +
-        sticksHtml(state.throwInfo, tossNow) +
+        sticksHtml(shownThrow, tossNow) +
         '<span class="mg-turn-text">' + (state.status === 'finished' ? '게임 끝' :
           myTurn ? (state.phase === 'throw' ? '내 차례! 윷가락을 던지세요.' : '옮길 말을 고르세요!') :
             esc((state.players.find(function (p) { return p.id === state.turnPlayerId; }) || {}).name || '') + ' 차례') + '</span>' +

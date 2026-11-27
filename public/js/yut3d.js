@@ -389,7 +389,7 @@
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
       // 윷가락
-      const info = state.throwInfo;
+      const info = state.throwInfo || state.lastThrow || null;
       if (info && info.seq && info.seq !== lastThrowSeq) {
         lastThrowSeq = info.seq;
         stickAnim.values = (info.sticks || []).slice(0, 4).map(function (v) { return !!v; });

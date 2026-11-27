@@ -134,6 +134,7 @@
     this.turn = 0;
     this.phase = 'throw';
     this.throwInfo = null;
+    this.lastThrow = null;
     this.lastMove = null;
     this.status = 'playing';
     this.finishReason = null;
@@ -219,6 +220,8 @@
     });
     if (!anyLegal) {
       this.pushLog('움직일 말이 없어 차례를 넘깁니다.');
+      // 던진 결과는 화면에 보여 줍니다(윷가락 연출) — 움직일 말만 없을 뿐입니다.
+      this.lastThrow = this.throwInfo;
       this.throwInfo = null;
       return this.endTurn(false);
     }
@@ -364,6 +367,7 @@
       phase: this.phase,
       turnPlayerId: this.status === 'playing' && this.currentPlayer() ? this.currentPlayer().id : null,
       throwInfo: this.throwInfo,
+      lastThrow: this.lastThrow || null,
       lastMove: this.lastMove,
       pieceCount: this.pieceCount,
       winnerId: this.winnerId,
