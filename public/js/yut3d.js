@@ -27,11 +27,11 @@
     if (aspect >= 1.35) {
       return {
         wide: true,
-        target: { x: 2.5, z: 0.2 },
-        halfW: 8.7,
+        target: { x: 2.7, z: 0.2 },
+        halfW: 9.0,
         halfD: 6.5,
-        mat: { x: 8.6, z: 1.3, w: 4.4, h: 4.2 },
-        sticks: { x: 8.6, z0: -0.28, dz: 1.05 }
+        mat: { x: 9.35, z: 1.1, w: 4.3, h: 4.2 },
+        sticks: { x: 9.35, z0: -0.48, dz: 1.05 }
       };
     }
     return {
