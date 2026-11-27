@@ -1559,6 +1559,59 @@ function createHub(options) {
     send(ws, { t: 'action_result', ok: true, message: '게임을 종료하고 대기실로 돌아왔습니다.' });
   }
 
+  /**
+   * 방장이 방 안의 다른 플레이어를 내보냅니다.
+   * - 대기실뿐 아니라 게임 중에도 쓸 수 있습니다. (인터넷 오류로 남은 자리·겹친 친구 정리)
+   * - 게임 중이면 그 자리는 '방 나가기'와 똑같이 자동 플레이로 바뀌어 남은 사람들의 게임이 이어집니다.
+   * - 내보낸 사람은 영구 차단이 아니라 안내를 받고 로비로 돌아가며, 같은 번호로 다시 입장할 수 있습니다.
+   */
+  function kickPlayer(ws, room, seat, targetId) {
+    if (!seat) return sendError(ws, '관전자는 참가자를 내보낼 수 없습니다.', 'spectator');
+    if (seat.id !== room.hostId) return sendError(ws, '방장만 참가자를 내보낼 수 있습니다.', 'not_host');
+    const id = String(targetId === undefined || targetId === null ? '' : targetId);
+    const target = room.seats.find(function (s) { return s.id === id; });
+    if (!target) return sendError(ws, '이미 방을 나간 참가자입니다.', 'no_player');
+    if (target.id === seat.id) return sendError(ws, '자기 자신은 내보낼 수 없습니다. [방 나가기]를 이용해 주세요.', 'kick_self');
+    if (target.isBot) return sendError(ws, 'AI 봇은 [봇 내보내기]로 정리해 주세요.', 'is_bot');
+
+    const wasPlaying = !!(room.game && room.game.status === 'playing');
+    const kickedWs = target.ws;
+    const kickedName = target.name;
+
+    room.seats = room.seats.filter(function (s) { return s.id !== target.id; });
+    target.ws = null;
+    target.connected = false;
+    target.autoPilot = false;
+    if (wasPlaying) {
+      const gp = room.game.playerById(target.id);
+      if (gp) gp.isBot = true;
+      ensureBotLoop(room);
+    }
+
+    // 소켓은 로비로 돌려보냅니다. (영구 차단이 아니라 다시 입장할 수 있습니다)
+    if (kickedWs) {
+      send(kickedWs, {
+        t: 'kicked',
+        gameId: room.gameId,
+        gameTitle: room.gameModule.title,
+        classCode: room.classCode,
+        code: room.code,
+        name: room.name,
+        playerName: kickedName,
+        byHost: true,
+        message: '방장이 ' + kickedName + '님을 ' + room.name + ' 방에서 내보냈습니다. 다시 들어올 수 있어요.'
+      });
+      kickedWs.meta.room = null;
+      kickedWs.meta.seat = null;
+      kickedWs.meta.role = 'lobby';
+    }
+
+    touch(room, kickedName + '님을 방장이 내보냈습니다.');
+    broadcastRoom(room);
+    broadcastOverview();
+    send(ws, { t: 'action_result', ok: true, message: kickedName + '님을 내보냈습니다.' });
+  }
+
   /** 교사 관전 화면에서 막힌 방을 초기화합니다. (참가자는 내보내고 대기 상태로) */
   function resetRoomByTeacher(ws, msg) {
     const gameModule = games.get(msg.gameId || 'halligalli');
@@ -1643,6 +1696,12 @@ function createHub(options) {
         const room = ws.meta.room;
         if (!room) return sendError(ws, '방에 입장해야 합니다.', 'no_room');
         return endGame(ws, room, ws.meta.seat);
+      }
+      case 'kickPlayer': {
+        const room = ws.meta.room;
+        if (!room) return sendError(ws, '방에 입장해야 합니다.', 'no_room');
+        const targetId = msg.playerId !== undefined && msg.playerId !== null ? msg.playerId : msg.id;
+        return kickPlayer(ws, room, ws.meta.seat, targetId);
       }
       case 'resetRoom':
         return resetRoomByTeacher(ws, msg);

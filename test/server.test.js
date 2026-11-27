@@ -523,3 +523,178 @@ test('교사가 진행 중인 모둠 방을 초기화하면 참가자가 정리�
     await env.hub.close();
   }
 });
+
+/* ---------------- 방장 강퇴(내보내기) ---------------- */
+
+test('방장만 참가자를 내보낼 수 있고, 내보낸 사람은 안내를 받은 뒤 다시 입장할 수 있다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    clients.push(a);
+    await a.next('welcome');
+    a.send({ t: 'join', gameId: 'halligalli', code: '4', number: 1, studentName: '방장' });
+    const joinedA = await a.next('joined');
+
+    const b = await connect(env.ws);
+    clients.push(b);
+    await b.next('welcome');
+    b.send({ t: 'join', gameId: 'halligalli', code: '4', number: 5, studentName: '친구' });
+    const joinedB = await b.next('joined');
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '4' && m.room.seats.length === 2;
+    });
+
+    // 방장이 아니면 내보낼 수 없다
+    b.send({ t: 'kickPlayer', playerId: joinedA.playerId });
+    const notHost = await b.next(function (m) { return m.t === 'error' && m.code === 'not_host'; });
+    assert.equal(notHost.code, 'not_host');
+
+    // 자기 자신은 내보낼 수 없다
+    a.send({ t: 'kickPlayer', playerId: joinedA.playerId });
+    const self = await a.next(function (m) { return m.t === 'error' && m.code === 'kick_self'; });
+    assert.match(self.message, /자기 자신/);
+
+    // 봇은 봇 내보내기로
+    a.send({ t: 'addBot' });
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '4' && m.room.seats.some(function (s) { return s.isBot; });
+    });
+    const room = env.hub.getRoom('halligalli', '4');
+    const bot = room.seats.find(function (s) { return s.isBot; });
+    a.send({ t: 'kickPlayer', playerId: bot.id });
+    const botErr = await a.next(function (m) { return m.t === 'error' && m.code === 'is_bot'; });
+    assert.match(botErr.message, /봇/);
+
+    // 방장이 친구를 내보낸다
+    a.send({ t: 'kickPlayer', playerId: joinedB.playerId });
+    const kicked = await b.next('kicked');
+    assert.equal(kicked.code, '4');
+    assert.equal(kicked.gameId, 'halligalli');
+    assert.match(kicked.message, /방장이/);
+    assert.match(kicked.message, /다시 들어올 수 있어요/);
+    const done = await a.next(function (m) { return m.t === 'action_result' && m.ok === true; });
+    assert.match(done.message, /내보냈습니다/);
+
+    const after = await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '4' && m.room.seats.length === 2 &&
+        m.room.seats.some(function (s) { return s.isBot; }) &&
+        !m.room.seats.some(function (s) { return s.id === joinedB.playerId; });
+    });
+    assert.equal(after.room.seats.length, 2, '방장 + 봇만 남는다');
+    assert.equal(after.room.youAreHost, true);
+    assert.equal(room.seats.some(function (s) { return s.id === joinedB.playerId; }), false);
+
+    // 내보낸 사람은 같은 번호로 다시 들어올 수 있다 (영구 차단 아님)
+    b.send({ t: 'join', gameId: 'halligalli', code: '4', number: 5, studentName: '친구' });
+    const rejoin = await b.next('joined');
+    assert.equal(rejoin.code, '4');
+    assert.equal(rejoin.number, 5);
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('게임 중 방장이 내보내면 그 자리는 자동 플레이로 바뀌고 게임은 이어진다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    clients.push(a);
+    await a.next('welcome');
+    a.send({ t: 'join', gameId: 'halligalli', code: '2', number: 1, studentName: '방장' });
+    await a.next('joined');
+
+    const b = await connect(env.ws);
+    clients.push(b);
+    await b.next('welcome');
+    b.send({ t: 'join', gameId: 'halligalli', code: '2', number: 2, studentName: '늦친구' });
+    const joinedB = await b.next('joined');
+    b.send({ t: 'ready', ready: true });
+    a.send({ t: 'addBot' });
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '2' && m.room.seats.length === 3 &&
+        m.room.seats.some(function (s) { return s.id === joinedB.playerId && s.ready; });
+    });
+    a.send({ t: 'start' });
+    await a.next(function (m) { return m.t === 'room' && m.room.code === '2' && m.room.status === 'playing'; });
+
+    const room = env.hub.getRoom('halligalli', '2');
+    assert.equal(room.game.playerById(joinedB.playerId).isBot, false);
+
+    a.send({ t: 'kickPlayer', playerId: joinedB.playerId });
+    const kicked = await b.next('kicked');
+    assert.match(kicked.message, /내보냈습니다/);
+
+    assert.equal(room.seats.some(function (s) { return s.id === joinedB.playerId; }), false, '내보낸 자리는 정리된다');
+    assert.ok(room.game, '게임은 계속된다');
+    assert.equal(room.game.status, 'playing');
+    assert.equal(room.game.playerById(joinedB.playerId).isBot, true, '내보낸 자리는 자동 플레이');
+
+    // 게임 중에는 다시 들어올 수 없다 (끝난 뒤에 가능)
+    b.send({ t: 'join', gameId: 'halligalli', code: '2', number: 2, studentName: '늦친구' });
+    const denied = await b.next(function (m) { return m.t === 'error' && m.code === 'playing'; });
+    assert.equal(denied.code, 'playing');
+
+    // 방장이 게임을 끝내면 대기실로 돌아오고, 그때는 다시 들어올 수 있다
+    a.send({ t: 'endGame' });
+    await a.next(function (m) { return m.t === 'room' && m.room.code === '2' && m.room.status === 'waiting'; });
+    b.send({ t: 'join', gameId: 'halligalli', code: '2', number: 2, studentName: '늦친구' });
+    const rejoin = await b.next('joined');
+    assert.equal(rejoin.number, 2);
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});
+
+test('인터넷이 끊겨 남은 자리(자동 플레이)도 방장이 내보내 정리할 수 있다', async function () {
+  const env = await boot();
+  const clients = [];
+  try {
+    const a = await connect(env.ws);
+    clients.push(a);
+    await a.next('welcome');
+    a.send({ t: 'join', gameId: 'halligalli', code: '5', number: 1, studentName: '방장' });
+    await a.next('joined');
+
+    const ghost = await connect(env.ws);
+    clients.push(ghost);
+    await ghost.next('welcome');
+    ghost.send({ t: 'join', gameId: 'halligalli', code: '5', number: 9, studentName: '끊긴친구' });
+    const joinedGhost = await ghost.next('joined');
+    ghost.send({ t: 'ready', ready: true });
+    a.send({ t: 'addBot' });
+    a.send({ t: 'addBot' });
+    await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '5' && m.room.seats.length === 4 &&
+        m.room.seats.some(function (s) { return s.id === joinedGhost.playerId && s.ready; });
+    });
+    a.send({ t: 'start' });
+    await a.next(function (m) { return m.t === 'room' && m.room.code === '5' && m.room.status === 'playing'; });
+    const room = env.hub.getRoom('halligalli', '5');
+
+    // 게임 중 연결이 끊긴다 → 자리는 남고 자동 플레이로 바뀐다
+    ghost.close();
+    const seen = await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '5' &&
+        m.room.seats.some(function (s) { return s.id === joinedGhost.playerId && !s.connected; });
+    });
+    assert.ok(seen, '끊긴 자리가 남아 있다');
+    const before = room.seats.length;
+    assert.equal(before, 4);
+
+    // 방장이 끊긴 자리를 내보내 정리한다
+    a.send({ t: 'kickPlayer', playerId: joinedGhost.playerId });
+    const after = await a.next(function (m) {
+      return m.t === 'room' && m.room.code === '5' && m.room.seats.length === before - 1 &&
+        !m.room.seats.some(function (s) { return s.id === joinedGhost.playerId; });
+    });
+    assert.equal(after.room.seats.length, before - 1, '끊긴 자리가 사라진다');
+    assert.ok(room.game && room.game.playerById(joinedGhost.playerId).isBot, '게임은 자동 플레이로 이어진다');
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});

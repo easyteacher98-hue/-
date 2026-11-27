@@ -490,6 +490,7 @@
         '<div class="seat-main"><div class="seat-name">' + esc(s.name) + '</div>' +
           '<div class="seat-sub">' + (s.isBot ? '자동으로 플레이합니다' : s.ready ? '준비 완료' : '준비를 기다리는 중') + '</div></div>' +
         '<div class="tags">' + tags.join('') + '</div>' +
+        (BG.kickButtonHtml ? BG.kickButtonHtml(room, s) : '') +
       '</div>';
     }).join('');
     const empty = [];
@@ -601,6 +602,7 @@
       '<div class="mg-player-list">' + rows + '</div>' +
       (room
         ? '<div class="mg-room-actions">' +
+            (room.youAreHost && BG.manageButtonHtml ? BG.manageButtonHtml(room, '참가자 관리') : '') +
             (room.youAreHost && room.status === 'playing'
               ? '<button class="btn btn-sm btn-danger" data-action="mini.endGame">⏹ 게임 종료</button>'
               : '') +
@@ -1038,6 +1040,7 @@
     }
     stopBotLoop();
     S.room = null;
+    BG.state.roomView = null;
     const meta = miniGameMeta(routeGameId() || '');
     if (meta) {
       clearSeat(meta.id);
@@ -1217,6 +1220,7 @@
     const meta = GAMES[msg.room.gameId];
     S.room = msg.room;
     S.role = msg.room.role;
+    BG.state.roomView = msg.room;
     const path = BG.currentPath();
     if (path.indexOf('/' + meta.id + '/room/') === 0) {
       if (msg.room.status === 'waiting') BG.ui.screen(lobbyHtml(meta, msg.room), 'mg.' + meta.id + '.room');
@@ -1277,6 +1281,7 @@
     if (msg && msg.gameId) clearSeat(msg.gameId);
     S.room = null;
     S.spectateSent = {};
+    BG.state.roomView = null;
     if (screenName().indexOf('mg.') === 0) {
       const meta = miniGameMeta(routeGameId() || '');
       if (meta) BG.navigate('/' + meta.id);
@@ -1314,6 +1319,20 @@
 
   BG.net.on('left', function () {
     S.room = null;
+    BG.state.roomView = null;
+  });
+
+  /* 방장이 나를 내보냈을 때 — 안내를 보여 주고 모둠 선택 화면으로 돌아갑니다. (다시 입장 가능) */
+  BG.net.on('kicked', function (msg) {
+    if (!msg || !GAMES[msg.gameId]) return;
+    BG.ui.toast(msg.message || '방장이 방에서 내보냈습니다. 다시 들어올 수 있어요.', 'error');
+    const meta = GAMES[msg.gameId];
+    clearSeat(meta.id);
+    S.room = null;
+    S.spectateSent = {};
+    BG.state.roomView = null;
+    if (screenName() === 'mg.' + meta.id + '.room') BG.navigate('/' + meta.id);
+    else BG.render();
   });
 
   BG.net.on('open', function () {

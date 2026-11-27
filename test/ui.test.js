@@ -622,3 +622,213 @@ test('대기방에서 나가기를 누르면 자리가 정리되고 모둠 목�
     await env.hub.close();
   }
 });
+
+test('방장은 대기방에서 친구를 내보낼 수 있고, 내보낸 친구는 안내를 보고 다시 들어올 수 있다', async function () {
+  const env = await boot();
+  const code = await createClass(env, '강퇴 반', '8888');
+  const hostDom = await openPage(env.base + '/?class=' + code);
+  const studentDom = await openPage(env.base + '/?class=' + code);
+  const hw = hostDom.window;
+  const sw = studentDom.window;
+  try {
+    await waitFor(function () { return hw.document.querySelector('.game-grid'); }, '방장 게임 포털');
+    await waitFor(function () { return sw.document.querySelector('.game-grid'); }, '친구 게임 포털');
+
+    // 방장: 1번으로 1모둠 입장
+    click(hw, '.game-card[href="#/halligalli"]');
+    await waitFor(function () { return hw.document.querySelector('#number'); }, '방장 번호 입력');
+    await waitFor(function () { return hw.BG.net.connected; }, '방장 서버 연결', 4000);
+    type(hw, '#number', '1');
+    click(hw, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return hw.document.querySelector('.seat-list'); }, '방장 대기방');
+
+    // 친구: 2번으로 같은 모둠 입장
+    click(sw, '.game-card[href="#/halligalli"]');
+    await waitFor(function () { return sw.document.querySelector('#number'); }, '친구 번호 입력');
+    await waitFor(function () { return sw.BG.net.connected; }, '친구 서버 연결', 4000);
+    type(sw, '#number', '2');
+    click(sw, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return sw.document.querySelector('.seat-list'); }, '친구 대기방');
+
+    // 방장 화면: 내 자리가 아닌 친구 자리에만 [내보내기] 버튼이 보인다
+    await waitFor(function () {
+      return hw.document.querySelectorAll('.seat-list [data-action="app.kick"]').length === 1;
+    }, '방장의 내보내기 버튼');
+    const kickBtn = hw.document.querySelector('.seat-list [data-action="app.kick"]');
+    assert.match(kickBtn.getAttribute('data-name'), /2번/);
+    assert.equal(sw.document.querySelectorAll('[data-action="app.kick"]').length, 0, '방장이 아닌 친구에게는 버튼이 없다');
+
+    // 한 번 더 확인하는 창을 거쳐 내보낸다
+    kickBtn.click();
+    await waitFor(function () {
+      const modal = hw.document.querySelector('#modal-root .modal');
+      return modal && /내보낼까요/.test(modal.textContent);
+    }, '내보내기 확인 창');
+    hw.document.querySelector('[data-action="app.kickConfirm"]').click();
+
+    // 방장: 좌석이 사라지고 안내가 뜬다
+    await waitFor(function () {
+      const list = hw.document.querySelector('.seat-list');
+      return list && list.querySelectorAll('.seat').length >= 1 && !/2번/.test(list.textContent);
+    }, '방장 화면에서 자리 정리');
+    await waitFor(function () {
+      const toast = hw.document.getElementById('toast');
+      return toast && /내보냈습니다/.test(toast.textContent);
+    }, '방장 안내');
+
+    // 내보낸 친구: 안내를 보고 모둠 선택 화면으로 돌아간다 (영구 차단 아님)
+    await waitFor(function () {
+      const toast = sw.document.getElementById('toast');
+      return toast && /방장이/.test(toast.textContent) && /다시 들어올 수 있어요/.test(toast.textContent);
+    }, '내보낸 친구 안내');
+    await waitFor(function () { return sw.location.hash === '#/halligalli'; }, '모둠 선택 화면');
+    assert.equal(sw.document.querySelector('.seat-list'), null, '대기방에서 나온다');
+
+    // 같은 번호로 바로 다시 들어올 수 있다 (영구 차단 아님)
+    click(sw, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return sw.document.querySelector('.seat-list'); }, '다시 입장한 대기방');
+    assert.match(sw.document.querySelector('.seat-list').textContent, /2번/);
+
+    assert.equal(hostDom.__errors.length, 0, 'JS 오류(방장): ' + hostDom.__errors.map(function (e) { return e.message; }).join(' | '));
+    assert.equal(studentDom.__errors.length, 0, 'JS 오류(친구): ' + studentDom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    hw.close();
+    sw.close();
+    await env.hub.close();
+  }
+});
+
+test('게임 중에도 방장이 [👥 참가자]에서 친구를 내보낼 수 있고, 게임은 이어진다', async function () {
+  const env = await boot();
+  const code = await createClass(env, '게임 중 강퇴 반', '8899');
+  const hostDom = await openPage(env.base + '/?class=' + code);
+  const studentDom = await openPage(env.base + '/?class=' + code);
+  const hw = hostDom.window;
+  const sw = studentDom.window;
+  try {
+    await waitFor(function () { return hw.document.querySelector('.game-grid'); }, '방장 게임 포털');
+    await waitFor(function () { return sw.document.querySelector('.game-grid'); }, '친구 게임 포털');
+
+    click(hw, '.game-card[href="#/halligalli"]');
+    await waitFor(function () { return hw.document.querySelector('#number'); }, '방장 번호 입력');
+    await waitFor(function () { return hw.BG.net.connected; }, '방장 서버 연결', 4000);
+    type(hw, '#number', '1');
+    click(hw, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return hw.document.querySelector('.seat-list'); }, '방장 대기방');
+
+    click(sw, '.game-card[href="#/halligalli"]');
+    await waitFor(function () { return sw.document.querySelector('#number'); }, '친구 번호 입력');
+    await waitFor(function () { return sw.BG.net.connected; }, '친구 서버 연결', 4000);
+    type(sw, '#number', '2');
+    click(sw, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return sw.document.querySelector('.seat-list'); }, '친구 대기방');
+
+    click(sw, '[data-action="hg.ready"]');
+    await waitFor(function () {
+      const list = hw.document.querySelector('.seat-list');
+      return list && /준비 완료/.test(list.textContent);
+    }, '친구 준비 완료');
+    click(hw, '[data-action="hg.addBot"]');
+    await waitFor(function () {
+      const btn = hw.document.querySelector('[data-action="hg.start"]');
+      return btn && !btn.disabled;
+    }, '시작 버튼');
+    click(hw, '[data-action="hg.start"]');
+    await waitFor(function () { return hw.document.querySelector('.table'); }, '방장 게임판');
+    await waitFor(function () { return sw.document.querySelector('.table'); }, '친구 게임판');
+
+    // 게임 중에도 방장에게는 [👥 참가자] 버튼이 있다
+    const manage = hw.document.querySelector('[data-action="app.manage"]');
+    assert.ok(manage, '게임 중 참가자 관리 버튼');
+    assert.equal(sw.document.querySelector('[data-action="app.manage"]'), null, '참가자에게는 없다');
+    manage.click();
+
+    await waitFor(function () {
+      const modal = hw.document.querySelector('#modal-root .modal');
+      return modal && /참가자 관리/.test(modal.textContent);
+    }, '참가자 관리 창');
+    const modal = hw.document.querySelector('#modal-root .modal');
+    assert.match(modal.textContent, /2번/);
+    assert.match(modal.textContent, /AI가 이어서 플레이/);
+
+    const kickBtn = modal.querySelector('[data-action="app.kick"]');
+    assert.ok(kickBtn, '친구 줄의 내보내기 버튼');
+    kickBtn.click();
+    await waitFor(function () {
+      const box = hw.document.querySelector('#modal-root .modal');
+      return box && /내보낼까요/.test(box.textContent);
+    }, '내보내기 확인 창');
+    hw.document.querySelector('[data-action="app.kickConfirm"]').click();
+
+    await waitFor(function () {
+      const toast = sw.document.getElementById('toast');
+      return toast && /방장이/.test(toast.textContent);
+    }, '내보낸 친구 안내');
+    await waitFor(function () { return sw.location.hash === '#/halligalli'; }, '친구 모둠 선택 화면');
+    assert.ok(hw.document.querySelector('.table'), '방장의 게임은 이어진다');
+
+    assert.equal(hostDom.__errors.length, 0, 'JS 오류(방장): ' + hostDom.__errors.map(function (e) { return e.message; }).join(' | '));
+    assert.equal(studentDom.__errors.length, 0, 'JS 오류(친구): ' + studentDom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    hw.close();
+    sw.close();
+    await env.hub.close();
+  }
+});
+
+test('전국여행 마블 대기방에서도 방장에게만 [내보내기] 버튼이 보이고, 누르면 친구가 나간다', async function () {
+  const env = await boot();
+  const code = await createClass(env, '마블 강퇴 반', '5544');
+  const dom = await openPage(env.base + '/?class=' + code);
+  const window = dom.window;
+  const friend = new WebSocket(env.ws);
+  const inbox = [];
+  try {
+    friend.on('message', function (raw) {
+      try { inbox.push(JSON.parse(String(raw))); } catch (err) { /* ignore */ }
+    });
+    await new Promise(function (resolve, reject) {
+      friend.on('open', resolve);
+      friend.on('error', reject);
+    });
+
+    await waitFor(function () { return window.document.querySelector('.game-grid'); }, '게임 포털');
+    click(window, '.game-card[href="#/bluemarble"]');
+    await waitFor(function () { return window.document.querySelector('#number'); }, '번호 입력');
+    await waitFor(function () { return window.BG.net.connected; }, '서버 연결', 4000);
+    type(window, '#number', '1');
+    click(window, '.group-card [data-action="bm.enterGroup"]');
+    await waitFor(function () { return window.document.querySelector('.seat-list'); }, '대기방');
+    assert.equal(window.document.querySelectorAll('[data-action="app.kick"]').length, 0, '혼자일 때는 버튼이 없다');
+
+    // 친구가 같은 방에 들어온다 (같은 번호·이름 입력은 앱 화면과 같은 메시지로)
+    friend.send(JSON.stringify({ t: 'join', gameId: 'bluemarble', code: '1', classCode: code, number: 2, studentName: '친구' }));
+    await waitFor(function () {
+      const list = window.document.querySelector('.seat-list');
+      return list && /2번 친구/.test(list.textContent);
+    }, '친구 자리');
+    const btn = window.document.querySelector('.seat-list [data-action="app.kick"]');
+    assert.ok(btn, '방장에게 내보내기 버튼');
+    assert.match(btn.getAttribute('data-name'), /2번 친구/);
+
+    btn.click();
+    await waitFor(function () {
+      const modal = window.document.querySelector('#modal-root .modal');
+      return modal && /내보낼까요/.test(modal.textContent);
+    }, '확인 창');
+    window.document.querySelector('[data-action="app.kickConfirm"]').click();
+
+    await waitFor(function () {
+      return inbox.some(function (m) { return m.t === 'kicked' && m.gameId === 'bluemarble'; });
+    }, '친구에게 내보냄 안내');
+    await waitFor(function () {
+      const list = window.document.querySelector('.seat-list');
+      return list && !/2번 친구/.test(list.textContent);
+    }, '자리 정리');
+    assert.equal(dom.__errors.length, 0, 'JS 오류: ' + dom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    try { friend.close(); } catch (err) { /* ignore */ }
+    window.close();
+    await env.hub.close();
+  }
+});

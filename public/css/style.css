@@ -645,6 +645,12 @@ body, p, li, td, .page-sub, .hint, .game-desc, .tool-desc, .seat-sub, .tile-foot
 .tag.off { background: #fbded9; color: #a33427; }
 .tag.you { background: #ffe2d5; color: #a33a22; }
 
+/* 방장이 대기방 좌석에서 친구를 내보내는 버튼 (태블릿·휴대폰에서도 누르기 쉽게) */
+.seat-kick { flex: none; white-space: nowrap; }
+@media (max-width: 640px) {
+  .seat-kick { padding: 8px 10px 9px; font-size: 12px; }
+}
+
 /* ---------- 게임판 ---------- */
 
 .board {

@@ -348,6 +348,7 @@
           '<div class="seat-main"><div class="seat-name">' + esc(s.name) + '</div>' +
             '<div class="seat-sub">' + (s.isBot ? '자동으로 플레이합니다' : s.ready ? '준비 완료' : '준비를 기다리는 중') + '</div></div>' +
           '<div class="tags">' + tags.join('') + '</div>' +
+          (BG.kickButtonHtml ? BG.kickButtonHtml(room, s) : '') +
         '</div>'
       );
     }).join('');
@@ -758,6 +759,7 @@
         '<button class="btn btn-sm ' + (S.hint ? 'btn-gold' : '') + '" data-action="hg.hintToggle" aria-pressed="' + (S.hint ? 'true' : 'false') + '">합계 보기</button>' +
         '<button class="btn btn-sm" data-action="hg.rules">📖 규칙</button>' +
         soundButton() +
+        (isMultiHost ? '<button class="btn btn-sm" data-action="app.manage">👥 참가자</button>' : '') +
         (isMultiHost ? '<button class="btn btn-sm btn-warn" data-action="hg.endGame">⏹ 게임 종료</button>' : '') +
         (view.role === 'spectator'
           ? '<button class="btn btn-sm btn-warn" data-action="hg.resetRoom" data-code="' + esc(view.code) + '" data-name="' + esc(String(view.title).replace(' 관전', '')) + '">🧹 방 초기화</button>' +
@@ -1172,6 +1174,7 @@
   function doLeave() {
     BG.net.send({ t: 'leave' });
     S.room = null;
+    BG.state.roomView = null;
     S.pendingJoin = null;
     S.resumeSent = {};
     clearSeat();
@@ -1526,6 +1529,7 @@
     if (!msg || !msg.room || msg.room.gameId !== 'halligalli') return;
     S.room = msg.room;
     S.role = msg.room.role;
+    BG.state.roomView = msg.room;
     if (msg.room.game) playBellSound(msg.room.game);
     const path = BG.currentPath();
     if (path.indexOf('/halligalli/room/') === 0) renderRoom([msg.room.code]);
@@ -1560,6 +1564,7 @@
     if (seat && String(seat.code) === String(msg.code)) clearSeat();
     S.room = null;
     S.pendingJoin = null;
+    BG.state.roomView = null;
     const screen = screenName();
     if (screen === 'hg.room') BG.navigate('/halligalli');
     else if (screen === 'hg.watch') {
@@ -1603,6 +1608,21 @@
   BG.net.on('left', function () {
     S.room = null;
     S.pendingJoin = null;
+  });
+
+  /* 방장이 나를 내보냈을 때 — 안내를 보여 주고 로비로 돌아갑니다. (다시 입장 가능) */
+  BG.net.on('kicked', function (msg) {
+    if (!msg || msg.gameId !== 'halligalli') return;
+    BG.ui.toast(msg.message || '방장이 방에서 내보냈습니다. 다시 들어올 수 있어요.', 'error');
+    clearSeat();
+    S.room = null;
+    S.pendingJoin = null;
+    S.resumeSent = {};
+    S.lastJoinAt = {};
+    BG.state.roomView = null;
+    const screen = screenName();
+    if (screen === 'hg.room' || screen === 'hg.bot') BG.navigate('/halligalli');
+    else BG.render();
   });
 
   BG.net.on('close', function () {

@@ -14,7 +14,10 @@
     classCode: '',
     className: '',
     number: '',
-    name: ''
+    name: '',
+    // 마지막으로 받은 방 화면(room 메시지) — 방장의 참가자 관리 창에서 씁니다.
+    roomView: null,
+    kickTarget: null
   };
 
   /* ---------- 저장소 ---------- */
@@ -356,6 +359,93 @@
   BG.actions['ui.closeModal'] = function (el, event) {
     if (event && event.target !== el) return;
     ui.closeModal();
+  };
+
+  /* ---------- 방장: 참가자 내보내기 ----------
+   * 인터넷 오류로 남은 자리·겹친 친구를 방장이 정리할 수 있게 합니다.
+   * 대기방 좌석의 [내보내기] 버튼과, 게임 중 [👥 참가자] 버튼이 같은 확인 창을 씁니다.
+   */
+
+  function seatCanBeKicked(room, seat) {
+    return !!room && !!room.youAreHost && !seat.isBot && seat.id !== room.youId;
+  }
+
+  /** 대기방 좌석 옆에 붙는 작은 [내보내기] 버튼 (방장에게만 보입니다) */
+  BG.kickButtonHtml = function (room, seat) {
+    if (!seatCanBeKicked(room, seat)) return '';
+    return '<button class="btn btn-sm btn-ghost seat-kick" data-action="app.kick"' +
+      ' data-id="' + ui.escape(seat.id) + '" data-name="' + ui.escape(seat.name) + '"' +
+      ' aria-label="' + ui.escape(seat.name) + '님 내보내기" title="' + ui.escape(seat.name) + '님 내보내기">🚪 내보내기</button>';
+  };
+
+  /** 방장의 [👥 참가자] 버튼 — 게임 중에도 열 수 있습니다. */
+  BG.manageButtonHtml = function (room, label) {
+    if (!room || !room.youAreHost) return '';
+    return '<button class="btn btn-sm" data-action="app.manage">👥 ' + ui.escape(label || '참가자') + '</button>';
+  };
+
+  function managePlayersModal(room) {
+    const seats = room.seats || [];
+    const rows = seats.map(function (s) {
+      const tags = [];
+      if (s.isHost) tags.push('<span class="tag host">방장</span>');
+      if (s.id === room.youId) tags.push('<span class="tag you">나</span>');
+      if (s.isBot) tags.push('<span class="tag bot">AI 봇</span>');
+      else if (!s.connected) tags.push('<span class="tag off">연결 끊김</span>');
+      return '<div class="seat' + (s.id === room.youId ? ' is-self' : '') + '">' +
+        '<div class="seat-main"><div class="seat-name">' + ui.escape(s.name) + '</div>' +
+          '<div class="seat-sub">' + (s.isBot ? 'AI 봇' : s.connected ? '접속 중' : '연결이 끊긴 자리') + '</div></div>' +
+        '<div class="tags">' + tags.join('') + '</div>' +
+        BG.kickButtonHtml(room, s) +
+      '</div>';
+    }).join('');
+
+    ui.modal(
+      '<h2>👥 참가자 관리</h2>' +
+      '<p class="hint">인터넷이 끊겨 남은 자리나 겹쳐 들어온 친구를 내보낼 수 있어요. ' +
+        '내보낸 친구는 잠시 뒤 같은 번호로 다시 들어올 수 있습니다.' +
+        (room.status === 'playing' ? ' 진행 중인 게임은 그 자리를 AI가 이어서 플레이합니다.' : '') +
+      '</p>' +
+      '<div class="seat-list" style="margin-top:12px">' + rows + '</div>' +
+      '<button class="btn btn-block" data-action="ui.closeModal" style="margin-top:16px">닫기</button>'
+    );
+  }
+
+  BG.managePlayers = function (room) {
+    const view = room || BG.state.roomView;
+    if (!view || !view.youAreHost) return;
+    managePlayersModal(view);
+  };
+
+  BG.actions['app.manage'] = function () {
+    BG.managePlayers();
+  };
+
+  BG.actions['app.kick'] = function (el) {
+    const id = String(el.getAttribute('data-id') || '');
+    const name = String(el.getAttribute('data-name') || '이 참가자');
+    if (!id) return;
+    const room = BG.state.roomView;
+    const playing = !!(room && room.status === 'playing');
+    BG.state.kickTarget = { id: id, name: name };
+    ui.modal(
+      '<h2>내보낼까요?</h2>' +
+      '<p><b>' + ui.escape(name) + '</b>님을 이 방에서 내보냅니다.' +
+        (playing ? ' 진행 중인 게임은 그 자리를 AI가 이어서 플레이합니다.' : '') +
+        ' 내보낸 친구는 잠시 뒤 다시 들어올 수 있어요.</p>' +
+      '<div class="row" style="justify-content:flex-end;margin-top:18px">' +
+        '<button class="btn btn-ghost" data-action="ui.closeModal">취소</button>' +
+        '<button class="btn btn-danger" data-action="app.kickConfirm">내보내기</button>' +
+      '</div>'
+    );
+  };
+
+  BG.actions['app.kickConfirm'] = function () {
+    const target = BG.state.kickTarget;
+    BG.state.kickTarget = null;
+    ui.closeModal();
+    if (!target) return;
+    BG.net.send({ t: 'kickPlayer', playerId: target.id });
   };
 
   /* <select data-action="..."> 는 값이 바뀌는 순간 처리합니다. */

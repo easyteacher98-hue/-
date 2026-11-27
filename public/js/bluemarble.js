@@ -315,6 +315,7 @@
           '<div class="seat-main"><div class="seat-name">' + esc(s.name) + '</div>' +
             '<div class="seat-sub">' + (s.isBot ? '자동으로 플레이합니다' : s.ready ? '준비 완료' : '준비를 기다리는 중') + '</div></div>' +
           '<div class="tags">' + tags.join('') + '</div>' +
+          (BG.kickButtonHtml ? BG.kickButtonHtml(room, s) : '') +
         '</div>'
       );
     }).join('');
@@ -570,6 +571,7 @@
         '<button class="btn btn-sm" data-action="bm.cameraReset">🎥 시점 초기화</button>' +
         '<button class="btn btn-sm" data-action="bm.rules">📖 규칙</button>' +
         soundButton() +
+        (view.role === 'player' && view.isHost && BG.manageButtonHtml ? BG.manageButtonHtml(view, '참가자') : '') +
         (view.role === 'spectator'
           ? '<button class="btn btn-sm btn-warn" data-action="bm.resetRoom" data-code="' + esc(view.code) + '" data-name="' + esc(view.title) + '">🧹 방 초기화</button>' +
             '<button class="btn btn-sm btn-danger" data-action="bm.watchBack">관전 종료</button>'
@@ -1252,6 +1254,7 @@
     S.room = null;
     S.pendingJoin = null;
     S.resumeSent = {};
+    BG.state.roomView = null;
     clearSeat();
     BG.navigate('/bluemarble');
   }
@@ -1593,6 +1596,7 @@
     if (!msg || !msg.room || msg.room.gameId !== 'bluemarble') return;
     S.room = msg.room;
     S.role = msg.room.role;
+    BG.state.roomView = msg.room;
     const path = BG.currentPath();
     if (path.indexOf('/bluemarble/room/') === 0) renderRoom([msg.room.code]);
     else if (path.indexOf('/bluemarble/watch/') === 0) renderWatch([msg.room.code]);
@@ -1626,6 +1630,7 @@
     S.screenKey = '';
     S.room = null;
     S.pendingJoin = null;
+    BG.state.roomView = null;
     const screen = screenName();
     if (screen === 'bm.room') BG.navigate('/bluemarble');
     else if (screen === 'bm.watch') {
@@ -1667,6 +1672,20 @@
 
   BG.net.on('close', function () {
     S.teacherBound = false;
+  });
+
+  /* 방장이 나를 내보냈을 때 — 안내를 보여 주고 모둠 선택 화면으로 돌아갑니다. (다시 입장 가능) */
+  BG.net.on('kicked', function (msg) {
+    if (!msg || msg.gameId !== 'bluemarble') return;
+    BG.ui.toast(msg.message || '방장이 방에서 내보냈습니다. 다시 들어올 수 있어요.', 'error');
+    clearSeat();
+    disposeBoard();
+    S.screenKey = '';
+    S.room = null;
+    S.pendingJoin = null;
+    BG.state.roomView = null;
+    if (screenName() === 'bm.room' || screenName() === 'bm.bot') BG.navigate('/bluemarble');
+    else BG.render();
   });
 
   BG.net.on('open', function () {
