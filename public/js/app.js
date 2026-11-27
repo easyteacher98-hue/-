@@ -303,6 +303,28 @@
 
   BG.router = router;
 
+  /* ---------- 화면을 벗어날 때 (브라우저 뒤로가기 포함) ----------
+   * 게임 모듈은 방 화면을 벗어나는 순간 자리를 정리해야 합니다.
+   * (방 나가기를 누르지 않고 뒤로가기만 하면 대기방에 '준비 중' 유령 인원이 남기 때문)
+   * hashchange 전에 등록한 함수를 차례로 불러 줍니다.
+   */
+  const routeLeaveHandlers = [];
+
+  BG.onRouteLeave = function (fn) {
+    if (typeof fn === 'function') routeLeaveHandlers.push(fn);
+  };
+
+  BG.routeLeave = function (from, to) {
+    if (!from || from === to) return;
+    for (const fn of routeLeaveHandlers) {
+      try {
+        fn(from, to);
+      } catch (err) {
+        console.error('[routeLeave] 오류:', err);
+      }
+    }
+  };
+
   BG.currentPath = function () {
     const hash = window.location.hash || '';
     const path = hash.startsWith('#') ? hash.slice(1) : '';
@@ -516,6 +538,8 @@
     window.scrollTo(0, 0);
     // 화면을 옮기면 이전 화면의 팝업(결과 모달 등)이 남지 않게 닫습니다.
     ui.closeModal();
+    // 방 화면을 뒤로가기로 벗어나면 서버에 방 나가기를 알립니다.
+    BG.routeLeave(BG.state.route.path, BG.currentPath());
     BG.render();
   });
 

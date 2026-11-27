@@ -971,6 +971,7 @@
       return;
     }
     if (!needServer()) return;
+    S.pendingJoin = String(code).toUpperCase();
     BG.net.send({ t: 'join', gameId: meta.id, code: code, classCode: BG.state.classCode, number: number, studentName: readName() });
   };
 
@@ -987,6 +988,7 @@
     const number = validNumber(readNumber());
     if (!number) { BG.ui.toast('출석번호를 입력해 주세요.', 'error'); return; }
     if (!needServer()) return;
+    S.pendingJoin = code;
     BG.net.send({ t: 'join', gameId: meta.id, code: code, classCode: BG.state.classCode, number: number, studentName: readName() });
   };
 
@@ -1040,6 +1042,7 @@
     }
     stopBotLoop();
     S.room = null;
+    S.pendingJoin = null;
     BG.state.roomView = null;
     const meta = miniGameMeta(routeGameId() || '');
     if (meta) {
@@ -1054,6 +1057,33 @@
     if (!needServer()) return;
     BG.net.send({ t: 'endGame' });
   };
+
+  /** 화면 이동만으로 방을 벗어날 때(뒤로가기 등) 조용히 자리를 정리합니다. */
+  function leaveQuietly(meta) {
+    if (BG.net.connected) BG.net.send({ t: 'leave' });
+    stopBotLoop();
+    S.room = null;
+    S.pendingJoin = null;
+    S.spectateSent = {};
+    BG.state.roomView = null;
+    clearSeat(meta.id);
+  }
+
+  /* 브라우저 뒤로가기 등으로 방 화면을 벗어나면 자동으로 방에서 나갑니다. */
+  BG.onRouteLeave(function (from, to) {
+    const match = /^\/([^/]+)\/room\/([^/]+)$/.exec(String(from));
+    if (!match) return;
+    const meta = GAMES[match[1]];
+    if (!meta) return;
+    if (String(to).indexOf('/' + meta.id + '/room/') === 0) return; // 방 → 다른 방 이동은 입장 처리에서 정리
+    const code = String(match[2]).toUpperCase();
+    const seat = getSeat(meta.id);
+    const stillHere = (S.room && S.room.gameId === meta.id && String(S.room.code).toUpperCase() === code) ||
+      (seat && String(seat.code).toUpperCase() === code) ||
+      S.pendingJoin === code;
+    if (!stillHere) return;
+    leaveQuietly(meta);
+  });
 
   BG.actions['mini.option'] = function (el) {
     if (!needServer()) return;
@@ -1204,6 +1234,18 @@
 
   BG.net.on('joined', function (msg) {
     if (!msg || !GAMES[msg.gameId]) return;
+    // 뒤로가기로 방을 벗어난 뒤 늦게 도착한 입장 응답이면 자리만 바로 정리합니다.
+    const expected = !!(msg.created || msg.resumed || S.pendingJoin === msg.code);
+    S.pendingJoin = null;
+    S.resumeSent = {};
+    if (!expected) {
+      const strayMeta = GAMES[msg.gameId];
+      S.room = null;
+      BG.state.roomView = null;
+      clearSeat(strayMeta.id);
+      BG.net.send({ t: 'leave' });
+      return;
+    }
     const meta = GAMES[msg.gameId];
     saveSeat(meta.id, { gameId: meta.id, code: msg.code, token: msg.token, playerId: msg.playerId });
     S.resumeSent = {};

@@ -1181,6 +1181,33 @@
     BG.navigate('/halligalli');
   }
 
+  /**
+   * 화면 이동만으로 방을 벗어날 때(뒤로가기 등) 조용히 자리를 정리합니다.
+   * 방 나가기 버튼과 같은 서버 처리를 하되, 화면 이동은 이미 일어났으므로 하지 않습니다.
+   */
+  function leaveQuietly() {
+    BG.net.send({ t: 'leave' });
+    S.room = null;
+    S.pendingJoin = null;
+    S.resumeSent = {};
+    S.lastJoinAt = {};
+    BG.state.roomView = null;
+    clearSeat();
+  }
+
+  /* 브라우저 뒤로가기 등으로 방 화면을 벗어나면 자동으로 방에서 나갑니다. */
+  BG.onRouteLeave(function (from, to) {
+    if (String(from).indexOf('/halligalli/room/') !== 0) return;
+    if (String(to).indexOf('/halligalli/room/') === 0) return; // 방 → 다른 방 이동은 입장 처리에서 정리
+    const code = String(String(from).split('/').pop() || '').toUpperCase();
+    const seat = getSeat();
+    const stillHere = (S.room && String(S.room.code).toUpperCase() === code) ||
+      (seat && String(seat.code).toUpperCase() === code) ||
+      S.pendingJoin === code;
+    if (!stillHere) return;
+    leaveQuietly();
+  });
+
   BG.actions['hg.rules'] = function () { openRules(); };
 
   BG.actions['hg.hintToggle'] = function () {
@@ -1514,8 +1541,17 @@
 
   BG.net.on('joined', function (msg) {
     if (!msg || msg.gameId !== 'halligalli') return;
+    // 뒤로가기로 방을 벗어난 뒤 늦게 도착한 입장 응답이면 자리만 바로 정리합니다.
+    const expected = !!(msg.created || msg.resumed || S.pendingJoin === msg.code);
     S.pendingJoin = null;
     S.resumeSent = {};
+    if (!expected) {
+      S.room = null;
+      BG.state.roomView = null;
+      clearSeat();
+      BG.net.send({ t: 'leave' });
+      return;
+    }
     saveSeat({ gameId: 'halligalli', code: msg.code, token: msg.token, playerId: msg.playerId });
     const path = BG.currentPath();
     if (path.indexOf('/halligalli/room/') !== 0) {

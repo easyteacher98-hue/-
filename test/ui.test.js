@@ -832,3 +832,66 @@ test('전국여행 마블 대기방에서도 방장에게만 [내보내기] 버�
     await env.hub.close();
   }
 });
+
+test('방 나가기 버튼 없이 브라우저 뒤로가기만 해도 자동으로 방에서 나가진다 (대기방 유령 인원 없음)', async function () {
+  const env = await boot();
+  const code = await createClass(env, '뒤로가기 반', '7700');
+  const hostDom = await openPage(env.base + '/?class=' + code);
+  const studentDom = await openPage(env.base + '/?class=' + code);
+  const hw = hostDom.window;
+  const sw = studentDom.window;
+  try {
+    await waitFor(function () { return hw.document.querySelector('.game-grid'); }, '방장 게임 포털');
+    await waitFor(function () { return sw.document.querySelector('.game-grid'); }, '친구 게임 포털');
+
+    click(hw, '.game-card[href="#/halligalli"]');
+    await waitFor(function () { return hw.document.querySelector('#number'); }, '방장 번호 입력');
+    await waitFor(function () { return hw.BG.net.connected; }, '방장 서버 연결', 4000);
+    type(hw, '#number', '1');
+    click(hw, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return hw.document.querySelector('.seat-list'); }, '방장 대기방');
+
+    click(sw, '.game-card[href="#/halligalli"]');
+    await waitFor(function () { return sw.document.querySelector('#number'); }, '친구 번호 입력');
+    await waitFor(function () { return sw.BG.net.connected; }, '친구 서버 연결', 4000);
+    type(sw, '#number', '2');
+    click(sw, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return sw.document.querySelector('.seat-list'); }, '친구 대기방');
+    click(sw, '[data-action="hg.ready"]');
+
+    // 방장 화면에 두 명(2번은 준비 완료)이 보인다
+    await waitFor(function () {
+      const list = hw.document.querySelector('.seat-list');
+      return list && /2번/.test(list.textContent) && /준비 완료/.test(list.textContent);
+    }, '두 명이 모인 대기방');
+    assert.ok(sw.sessionStorage.getItem('hg.seat'), '친구는 자리를 저장하고 있다');
+
+    // 방 나가기를 누르지 않고 브라우저 뒤로가기만 한다
+    sw.history.back();
+    await waitFor(function () { return sw.location.hash === '#/halligalli'; }, '뒤로가기로 모둠 선택 화면');
+    await waitFor(function () { return sw.sessionStorage.getItem('hg.seat') === null; }, '친구 좌석 정보 정리');
+
+    // 서버에서도 자리가 사라져 방장 화면에 다시 1/4명만 남는다
+    await waitFor(function () {
+      const list = hw.document.querySelector('.seat-list');
+      return list && !/2번/.test(list.textContent);
+    }, '유령 인원 정리');
+    const title = hw.document.querySelector('.panel-title').textContent;
+    assert.match(title, /1\/4명/);
+
+    // 뒤로 나온 친구는 같은 번호로 다시 들어올 수 있다
+    click(sw, '.group-card [data-action="hg.enterGroup"]');
+    await waitFor(function () { return sw.document.querySelector('.seat-list'); }, '다시 입장한 대기방');
+    await waitFor(function () {
+      const list = hw.document.querySelector('.seat-list');
+      return list && /2번/.test(list.textContent);
+    }, '다시 들어온 친구');
+
+    assert.equal(hostDom.__errors.length, 0, 'JS 오류(방장): ' + hostDom.__errors.map(function (e) { return e.message; }).join(' | '));
+    assert.equal(studentDom.__errors.length, 0, 'JS 오류(친구): ' + studentDom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    hw.close();
+    sw.close();
+    await env.hub.close();
+  }
+});

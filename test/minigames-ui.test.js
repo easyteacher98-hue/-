@@ -310,3 +310,59 @@ test('제작자 통계: 교사용 화면 아래 링크로만 들어가고, 암�
     await env.hub.close();
   }
 });
+
+test('미니게임 방에서도 뒤로가기로 화면을 벗어나면 자동으로 방에서 나가진다 (오목)', async function () {
+  const env = await boot();
+  const hostDom = await openPage(env.base + '/?class=DEMO');
+  const studentDom = await openPage(env.base + '/?class=DEMO');
+  const hw = hostDom.window;
+  const sw = studentDom.window;
+  function typeNumber(window, value) {
+    const el = window.document.querySelector('#number');
+    assert.ok(el, '#number 입력창');
+    el.value = value;
+    el.dispatchEvent(new window.Event('input', { bubbles: true }));
+  }
+  try {
+    await waitFor(function () { return hw.document.querySelector('.game-grid'); }, '방장 포털');
+    await waitFor(function () { return sw.document.querySelector('.game-grid'); }, '친구 포털');
+
+    // 방장: 오목 1모둠, 1번
+    click(hw, '.game-card[href="#/gomoku"]');
+    await waitFor(function () { return hw.document.querySelector('#number'); }, '방장 번호 입력');
+    await waitFor(function () { return hw.BG.net.connected; }, '방장 서버 연결', 4000);
+    typeNumber(hw, '1');
+    click(hw, '.group-card [data-action="mini.enterGroup"]');
+    await waitFor(function () { return hw.document.querySelector('.seat-list'); }, '방장 대기방');
+
+    // 친구: 같은 방, 2번
+    click(sw, '.game-card[href="#/gomoku"]');
+    await waitFor(function () { return sw.document.querySelector('#number'); }, '친구 번호 입력');
+    await waitFor(function () { return sw.BG.net.connected; }, '친구 서버 연결', 4000);
+    typeNumber(sw, '2');
+    click(sw, '.group-card [data-action="mini.enterGroup"]');
+    await waitFor(function () { return sw.document.querySelector('.seat-list'); }, '친구 대기방');
+    await waitFor(function () {
+      const list = hw.document.querySelector('.seat-list');
+      return list && /2번/.test(list.textContent);
+    }, '두 명이 모인 오목 대기방');
+    assert.ok(sw.sessionStorage.getItem('mg.seat.gomoku'), '친구 좌석 정보 저장');
+
+    // 뒤로가기로 방 화면을 벗어난다
+    sw.history.back();
+    await waitFor(function () { return sw.location.hash === '#/gomoku'; }, '뒤로가기');
+    await waitFor(function () { return sw.sessionStorage.getItem('mg.seat.gomoku') === null; }, '좌석 정보 정리');
+    await waitFor(function () {
+      const list = hw.document.querySelector('.seat-list');
+      return list && !/2번/.test(list.textContent);
+    }, '유령 인원 정리');
+    assert.match(hw.document.querySelector('.panel-title').textContent, /1\/2명/);
+
+    assert.equal(hostDom.__errors.length, 0, 'JS 오류(방장): ' + hostDom.__errors.map(function (e) { return e.message; }).join(' | '));
+    assert.equal(studentDom.__errors.length, 0, 'JS 오류(친구): ' + studentDom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    hw.close();
+    sw.close();
+    await env.hub.close();
+  }
+});
