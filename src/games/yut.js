@@ -7,6 +7,10 @@
 const YT = require('../../public/yut-engine.js');
 
 const drivers = new WeakMap();
+// 봇이 쉬는 시간 (ms) — 던진 뒤에는 윷가락 연출, 옮긴 뒤에는 말이 걷는 연출만큼
+const paces = new WeakMap();
+const BOT_THROW_MS = 1500;
+const BOT_MOVE_MS = 1450;
 
 const REASON_TEXT = {
   not_playing: '게임이 진행 중이 아닙니다.',
@@ -67,10 +71,17 @@ module.exports = {
     return { ok: false, reason: 'unknown_action' };
   },
 
-  botTick(game) {
+  botTick(game, now) {
     const driver = drivers.get(game);
     if (!driver) return null;
-    return driver.tick();
+    // 윷가락이 떨어지고 말이 한 칸씩 걷는 장면을 다 보여 준 뒤에 봇이 다음 동작을 합니다.
+    const t = typeof now === 'number' ? now : Date.now();
+    const pace = paces.get(game);
+    if (pace && t - pace.at < pace.wait) return null;
+    const action = driver.tick();
+    if (!action) return null;
+    paces.set(game, { at: t, wait: action.action === 'throw' ? BOT_THROW_MS : BOT_MOVE_MS });
+    return action;
   },
 
   serialize(game, viewerId) {

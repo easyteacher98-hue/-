@@ -1066,7 +1066,16 @@
       }
       renderBotScreen(st.gameId);
     }
-    scheduleBotTick(action ? 620 : 500);
+    scheduleBotTick(action ? nextBotDelay(st.gameId, action, 620) : 500);
+  }
+
+  /**
+   * 봇이 한 동작을 마친 뒤 얼마나 쉴지.
+   * 윷놀이는 윷가락이 떨어지고 말이 한 칸씩 걷는 장면을 다 보여 준 뒤에 다음 동작을 합니다.
+   */
+  function nextBotDelay(gameId, action, base) {
+    if (gameId !== 'yut' || !action) return base;
+    return action.action === 'throw' ? 1650 : 1500;
   }
 
   function finishLocal() {

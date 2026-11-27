@@ -26,6 +26,9 @@
     resultShown: {},
     cardShown: 0,
     diceShown: 0,
+    // 말이 걷는 중이라 잠깐 미뤄 둔 안내(카드·결과)를 한 번만 예약합니다.
+    deferred: {},
+    lastView: null,
     screenKey: '',
     board: null,
     fallback: false,
@@ -665,6 +668,7 @@
 
   function updateGame(view) {
     const game = view.game;
+    S.lastView = view;
     const boardEl = document.getElementById('bm-canvas');
     if (!boardEl) return;
 
@@ -707,12 +711,32 @@
     maybeShowResult(view);
   }
 
+  /** 말이 걷는 중이면 다 걸은 뒤로 미룹니다. (같은 일은 한 번만 예약) */
+  function deferUntilIdle(key, fn) {
+    if (S.deferred[key]) return;
+    S.deferred[key] = true;
+    setTimeout(function () {
+      S.deferred[key] = false;
+      fn();
+    }, 240);
+  }
+
   function maybeShowCard(view) {
     const game = view.game;
     const card = game.lastCard;
     if (!card || card.seq === S.cardShown) return;
+    if (game.status === 'finished') {
+      S.cardShown = card.seq;
+      return;
+    }
+    // 말이 아직 걷고 있으면, 도착한 뒤에 카드를 보여 줍니다.
+    if (boardBusy()) {
+      deferUntilIdle('card:' + card.seq, function () {
+        if (S.lastView) maybeShowCard(S.lastView);
+      });
+      return;
+    }
     S.cardShown = card.seq;
-    if (game.status === 'finished') return;
     const mine = card.playerId === view.youId;
     if (!mine) {
       BG.ui.toast(card.playerName + '님 황금열쇠: ' + card.title, '');
@@ -826,6 +850,13 @@
     if (!game || game.status !== 'finished') return;
     const key = (view.code || view.mode) + ':' + (game.startedAt || '') + ':' + game.players.length;
     if (S.resultShown[key]) return;
+    // 마지막 말이 아직 걷고 있으면 도착한 뒤에 결과를 보여 줍니다.
+    if (boardBusy()) {
+      deferUntilIdle('result:' + key, function () {
+        if (S.lastView) maybeShowResult(S.lastView);
+      });
+      return;
+    }
     S.resultShown[key] = true;
     if (BG.sound) BG.sound.celebration();
     BG.ui.modal(resultModalHtml(view));

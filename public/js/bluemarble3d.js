@@ -545,9 +545,10 @@
         }
       }
 
+      // 주사위 연출을 먼저 걸어 두고, 말이 그 뒤에 출발하도록 순서를 맞춥니다.
+      this.updateDice(state.lastRoll);
       this.updateTokens(state);
       this.updateCurrentRing(state);
-      this.updateDice(state.lastRoll);
     }
 
     updateTileTexture(idx, owner, level) {
@@ -734,8 +735,14 @@
 
         const walk = self.tokenWalk.get(p.id);
         const tile = p.pos;
-        if (!walk && group.userData.tile !== tile) {
-          self.startWalk(p.id, group, group.userData.tile, tile, offset);
+        if (group.userData.tile !== tile) {
+          if (!walk) {
+            self.startWalk(p.id, group, group.userData.tile, tile, offset);
+          } else {
+            // 지금 걷는 중이면 다 걸은 뒤에 이어서 걷습니다.
+            walk.pending = tile;
+            walk.pendingOffset = offset;
+          }
         } else if (walk && !walk.offset) {
           walk.offset = offset;
         }
@@ -751,24 +758,29 @@
       });
     }
 
+    /** 주사위가 거의 멈출 즈음 말이 출발하도록 잠깐 기다립니다. */
+    walkDelay(now) {
+      const anim = this.dice && this.dice.anim;
+      if (!anim) return 0;
+      const at = anim.startedAt + anim.duration * 0.82;
+      return Math.max(0, at - now);
+    }
+
     startWalk(playerId, group, from, to, offset) {
       const distance = ((to - from) % 28 + 28) % 28;
+      const now = performance.now();
       const walk = {
         from: from,
         to: to,
         steps: distance,
-        step: 0,
-        startedAt: performance.now(),
-        stepMs: distance > 10 ? 120 : 185,
-        offset: offset || { x: 0, z: 0 }
+        startedAt: now + this.walkDelay(now),
+        // 한 칸씩 또렸하게 보이도록, 멀리 갈 때는 조금 빠르게 걷습니다.
+        stepMs: distance >= 8 ? 170 : 200,
+        offset: offset || { x: 0, z: 0 },
+        // 14칸 넘게 움직이면(무인도로 이동 등) 한 칸씩 걷지 않고 날아갑니다.
+        fly: distance > 14,
+        flyMs: 620
       };
-      // 14칸 넘게 움직이면(무인도로 이동 등) 순간이동
-      if (distance > 14) {
-        const target = tilePosition(to);
-        group.position.set(target.x + walk.offset.x, 0.06, target.z + walk.offset.z);
-        group.userData.tile = to;
-        return;
-      }
       walk.prev = group.position.clone();
       this.tokenWalk.set(playerId, walk);
     }
@@ -895,7 +907,6 @@
     }
 
     animateTokens(now) {
-      const THREE = this.THREE;
       const self = this;
       this.tokenWalk.forEach(function (walk, playerId) {
         const group = self.tokenGroups.get(playerId);
@@ -903,15 +914,40 @@
           self.tokenWalk.delete(playerId);
           return;
         }
-        const elapsed = now - walk.startedAt;
-        const stepTime = walk.stepMs;
-        const stepFloat = elapsed / stepTime;
-        const stepIndex = Math.floor(stepFloat);
-        if (stepIndex >= walk.steps) {
+        // 주사위가 아직 굴러가는 중이면 말은 제자리에서 기다립니다.
+        if (now < walk.startedAt) return;
+        const offset = walk.offset || { x: 0, z: 0 };
+
+        const finish = function () {
           const target = tilePosition(walk.to);
-          group.position.set(target.x + (walk.offset ? walk.offset.x : 0), 0.06, target.z + (walk.offset ? walk.offset.z : 0));
+          group.position.set(target.x + offset.x, 0.06, target.z + offset.z);
           group.userData.tile = walk.to;
           self.tokenWalk.delete(playerId);
+          // 걷는 동안 도착한 새 자리가 있으면 이어서 걷습니다.
+          if (walk.pending !== undefined && walk.pending !== walk.to) {
+            self.startWalk(playerId, group, walk.to, walk.pending, walk.pendingOffset || offset);
+          }
+        };
+
+        if (walk.fly) {
+          const t = Math.min(1, (now - walk.startedAt) / walk.flyMs);
+          const a = walk.prev;
+          const b = tilePosition(walk.to);
+          const e = t * t * (3 - 2 * t);
+          group.position.set(
+            a.x + (b.x + offset.x - a.x) * e,
+            0.06 + Math.sin(Math.PI * t) * 0.95,
+            a.z + (b.z + offset.z - a.z) * e
+          );
+          if (t >= 1) finish();
+          return;
+        }
+
+        const elapsed = now - walk.startedAt;
+        const stepFloat = elapsed / walk.stepMs;
+        const stepIndex = Math.floor(stepFloat);
+        if (stepIndex >= walk.steps) {
+          finish();
           return;
         }
         const fromIdx = (walk.from + stepIndex) % 28;

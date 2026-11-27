@@ -144,3 +144,54 @@ test('말을 옮기면 2D 윷판에서도 말 위치가 바뀐다 (3D 가 없어
     await hub.close();
   }
 });
+
+/*
+ * 2026-11-27 "말이 이동하는거 하나하나 보여줬으면 좋겠어"
+ * 걸(3칸)이면 1칸 → 2칸 → 3칸을 차례로 밟아야 합니다.
+ * 3D 연출은 이 목록대로 한 칸씩 말을 움직입니다.
+ */
+test('3D 말은 도착 자리까지 한 칸씩 밟아 갑니다 (엔진 경로와 같은 순서)', async function () {
+  const hub = createHub({ groupCapacity: 4, store: false });
+  const info = await hub.start(0, '127.0.0.1');
+  const dom = await openPage('http://127.0.0.1:' + info.port + '/?class=DEMO');
+  const window = dom.window;
+  try {
+    await waitFor(function () { return window.BG && window.BG.yut3d && window.Yut; }, '윷놀이 스크립트');
+    const YT = window.Yut;
+    const paths = YT.PATHS;
+    const rawNodes = window.BG.yut3d.pathNodes;
+    const nodes = function (from, to, opts) { return Array.from(rawNodes(from, to, opts)); };
+    assert.equal(typeof nodes, 'function', '경로를 확인할 수 있다');
+
+    // 출발점에서 나가면 1 → 2 → 3
+    assert.deepEqual(nodes(null, { path: 'outer', idx: 3 }), [1, 2, 3]);
+    // 모서리(5)에 정확히 멈추면 지름길로 (지나치면 그냥 바깥 둘레)
+    assert.deepEqual(nodes({ path: 'outer', idx: 3 }, { path: 'd5', idx: 0 }), [4, 5]);
+    assert.deepEqual(nodes({ path: 'outer', idx: 3 }, { path: 'outer', idx: 6 }), [4, 5, 6]);
+    // 완주는 마지막 자리(출발점)까지 밟고 갑니다.
+    assert.deepEqual(nodes({ path: 'outer', idx: 18 }, null, { toFinish: true }), [19, 0]);
+
+    // 엔진이 계산한 도착 자리와 같은 순서·같은 칸 수인지 전부 확인합니다.
+    Object.keys(paths).forEach(function (path) {
+      const length = paths[path].length;
+      for (let i = 0; i < length - 1; i++) {
+        for (let steps = 1; steps <= 5; steps++) {
+          const result = YT.advance({ path: path, idx: i }, steps);
+          if (result.finished) {
+            const hops = nodes({ path: path, idx: i }, null, { toFinish: true });
+            assert.equal(hops[hops.length - 1], 0, path + ' ' + i + ' 완주는 출발점에서 끝난다');
+            continue;
+          }
+          const hops = nodes({ path: path, idx: i }, result.pos);
+          assert.ok(hops, path + ' ' + i + ' +' + steps + ' 경로가 앞으로 이어진다');
+          assert.equal(hops.length, steps, path + ' ' + i + ' +' + steps + ' 은 ' + steps + '칸');
+          assert.equal(hops[hops.length - 1], result.node, path + ' ' + i + ' +' + steps + ' 도착 자리');
+        }
+      }
+    });
+    assert.deepEqual(dom.__errors.map(String), []);
+  } finally {
+    window.close();
+    await hub.close();
+  }
+});

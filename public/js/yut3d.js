@@ -577,6 +577,47 @@
     return group;
   }
 
+  /* ---------------- 한 칸씩 이동하는 경로 ----------------
+   * 엔진(public/yut-engine.js)의 PATHS·advance 규칙과 같은 방식으로
+   * 출발 자리에서 도착 자리까지 밟고 지나갈 자리들을 차례대로 만듭니다.
+   */
+
+  /** pos 에서 한 칸 앞으로 갔을 때의 자리 (말판 끝이면 null) */
+  function stepForward(paths, pos, target) {
+    const path = paths[pos.path];
+    if (!path) return null;
+    const nextIdx = pos.idx + 1;
+    if (nextIdx > path.length - 1) return null;
+    let nextPath = pos.path;
+    let idx = nextIdx;
+    const node = path[nextIdx];
+    // 모서리(5·10)에 정확히 멈출 때만 지름길로 들어갑니다. (엔진과 같은 규칙)
+    if (pos.path === 'outer' && target) {
+      if (node === 5 && target.path === 'd5' && target.idx === 0) { nextPath = 'd5'; idx = 0; }
+      else if (node === 10 && target.path === 'd10' && target.idx === 0) { nextPath = 'd10'; idx = 0; }
+    }
+    return { path: nextPath, idx: idx };
+  }
+
+  /**
+   * from → target 으로 가는 동안 밟을 자리 목록.
+   * toFinish 이면 말판 끝(출발점)까지, 아니면 target 에 닿을 때까지 만듭니다.
+   * 빽도처럼 앞으로 가지 않는 이동은 null 을 돌려줍니다.
+   */
+  function walkPath(paths, from, target, toFinish) {
+    const out = [];
+    let cur = from ? { path: from.path, idx: from.idx } : { path: 'outer', idx: 0 };
+    for (let i = 0; i < 34; i++) {
+      const next = stepForward(paths, cur, toFinish ? null : target);
+      if (!next) break;
+      out.push(next);
+      cur = next;
+      if (!toFinish && target && cur.path === target.path && cur.idx === target.idx) return out;
+    }
+    if (toFinish) return out;
+    return null;
+  }
+
   function createBoard(container, options) {
     const THREE = window.THREE;
     const opts = options || {};
@@ -819,6 +860,40 @@
       };
     }
 
+    /* ----- 한 칸씩 걷는 경로 -----
+     * 엔진(public/yut-engine.js)의 PATHS·advance 규칙과 같은 방식으로
+     * 출발 자리에서 도착 자리까지 밟고 지나갈 자리들을 차례대로 만듭니다.
+     */
+    const HOP_MS = 205;      // 한 칸 걷는 데 걸리는 시간
+    const HOP_HEIGHT = 0.5;  // 통통 튀는 높이
+
+    function nodeOf(pos) {
+      const path = PATHS[pos.path];
+      return path ? path[pos.idx] : undefined;
+    }
+
+    /** 윷가락이 떨어지기 전에는 말이 출발하지 않도록 시작 시간을 늦춥니다. */
+    function walkStartDelay(now) {
+      if (!stickAnim.active) return 0;
+      const landed = stickAnim.startedAt + 1150;
+      return Math.max(0, landed - now);
+    }
+
+    function pushWalk(token, from, hops, startAt, hideAfter) {
+      if (token.walk) {
+        token.walk.nodes = token.walk.nodes.concat(hops);
+        token.walk.hideAfter = token.walk.hideAfter || !!hideAfter;
+        return;
+      }
+      token.walk = {
+        nodes: hops,
+        from: from,
+        startedAt: startAt,
+        hopMs: HOP_MS,
+        hideAfter: !!hideAfter
+      };
+    }
+
     /* ----- 상태 반영 ----- */
     let lastThrowSeq = 0;
     let lastMoveSeq = 0;
@@ -852,9 +927,29 @@
         lastMoveSeq = 0;
       }
 
-      // 말
+      // 말 — 실제 말판 경로를 한 칸씩 밟고 이동합니다.
       const players = state.players || [];
       const alive = {};
+      // 윷가락이 아직 떨어지지 않았으면, 떨어지고 잠깐 뒤에 말이 출발합니다.
+      const startDelay = walkStartDelay(now);
+      // 같은 자리에 여러 말이 있으면 조금씩 비켜 세워 모두 보이게 합니다.
+      const stack = {};
+      players.forEach(function (player) {
+        (player.pieces || []).forEach(function (piece) {
+          if (piece.finished || piece.node === null || piece.node === undefined) return;
+          const key = String(piece.node);
+          if (!stack[key]) stack[key] = [];
+          stack[key].push(piece.id);
+        });
+      });
+      function stackOffset(ids, id) {
+        if (!ids || ids.length < 2) return null;
+        const i = ids.indexOf(id);
+        if (i < 0) return null;
+        const angle = (i / ids.length) * Math.PI * 2;
+        return { x: Math.cos(angle) * 0.26, z: Math.sin(angle) * 0.26 };
+      }
+
       players.forEach(function (player, index) {
         (player.pieces || []).forEach(function (piece) {
           alive[piece.id] = true;
@@ -862,42 +957,73 @@
           if (!token) {
             const color = colorFor(player, index);
             const group = makeToken(piece, player, color);
-            token = { group: group, walk: null, node: null, color: color, playerId: player.id };
+            token = { group: group, walk: null, logical: null, pos: null, color: color, playerId: player.id };
             tokens.set(piece.id, token);
             scene.add(group);
           }
-          token.group.visible = !piece.finished;
-          if (piece.finished) {
-            token.node = 'finished';
+
+          let kind = 'board';
+          let pos = null;
+          if (piece.finished) kind = 'finished';
+          else if (piece.waiting || piece.node === null || piece.node === undefined) kind = 'waiting';
+          else pos = { path: piece.path, idx: piece.idx };
+          token.offset = pos ? stackOffset(stack[String(piece.node)], piece.id) : null;
+
+          // 처음 보이는 말은 그 자리에 그대로 놓습니다.
+          if (firstApply || token.logical === null) {
+            token.logical = kind;
+            token.pos = pos;
+            if (kind === 'board') {
+              const at = nodeToWorld(piece.node);
+              token.group.position.set(at.x + (token.offset ? token.offset.x : 0), 0.2, at.z + (token.offset ? token.offset.z : 0));
+              token.group.visible = true;
+            } else {
+              token.group.visible = false;
+            }
             return;
           }
-          const node = piece.node;
-          if (node === null || node === undefined) {
-            // 출발점 대기
-            token.node = 'waiting';
+
+          const same = token.logical === kind && (kind !== 'board' ||
+            (!!token.pos && !!pos && token.pos.path === pos.path && token.pos.idx === pos.idx));
+          if (same) {
+            if (token.logical === 'board') {
+              token.group.visible = true;
+              if (!token.walk && pos) {
+                const at = nodeToWorld(piece.node);
+                token.group.position.set(
+                  at.x + (token.offset ? token.offset.x : 0),
+                  0.2,
+                  at.z + (token.offset ? token.offset.z : 0)
+                );
+              }
+            }
+            return;
+          }
+
+          const fromPos = token.logical === 'board' ? token.pos : null;
+          let hops = null;
+          let hideAfter = false;
+          if (kind === 'board') {
+            hops = walkPath(PATHS, fromPos, pos, false);
+            if (!hops || !hops.length) hops = [pos];
+          } else if (kind === 'finished') {
+            // 완주: 마지막 자리(출발점)까지 밟고 간 뒤 사라집니다.
+            hops = walkPath(PATHS, fromPos, null, true) || [];
+            hideAfter = true;
+          } else if (fromPos) {
+            // 잡히거나 빽도로 출발점에 돌아감: 출발점까지 한 칸 물러섭니다.
+            hops = [{ path: 'outer', idx: 0 }];
+            hideAfter = true;
+          }
+
+          token.logical = kind;
+          token.pos = pos;
+          if (hops && hops.length) {
+            token.group.visible = true;
+            pushWalk(token, fromPos || { path: 'outer', idx: 0 }, hops, now + startDelay, hideAfter);
+          } else if (hideAfter) {
             token.group.visible = false;
-            return;
-          }
-          const target = nodeToWorld(node);
-          if (firstApply || token.node === null || token.node === 'waiting' || token.node === 'finished') {
-            token.group.position.set(target.x, 0.2, target.z);
-            token.node = node;
-            token.group.visible = true;
-            return;
-          }
-          if (token.node !== node) {
-            const fromNode = token.node;
-            token.walk = {
-              from: fromNode,
-              to: node,
-              path: piece.path,
-              startedAt: now,
-              // 잡기/완주는 조금 더 천천히
-              duration: Math.min(1400, 260 + Math.abs((piece.idx || 0) - (token.idx || 0)) * 90)
-            };
-            token.node = node;
-            token.idx = piece.idx;
-            token.group.visible = true;
+            token.walk = null;
           }
         });
       });
@@ -939,17 +1065,39 @@
       tokens.forEach(function (token) {
         const walk = token.walk;
         if (!walk) return;
-        const t = Math.min(1, (now - walk.startedAt) / walk.duration);
-        const a = nodeToWorld(walk.from);
-        const b = nodeToWorld(walk.to);
-        const e = t * t * (3 - 2 * t);
-        const hop = Math.sin(t * Math.PI) * 0.5;
+        const off = token.offset || { x: 0, z: 0 };
+        const at = function (pos) {
+          const node = nodeOf(pos);
+          if (node === undefined) return { x: off.x, z: off.z };
+          const w = nodeToWorld(node);
+          return { x: w.x + off.x, z: w.z + off.z };
+        };
+        if (now < walk.startedAt) {
+          // 윷가락이 떨어지기를 기다리는 동안에는 출발 자리에 서 있습니다.
+          const a = at(walk.from || walk.nodes[0]);
+          token.group.position.set(a.x, 0.2, a.z);
+          return;
+        }
+        const elapsed = now - walk.startedAt;
+        const steps = walk.nodes.length;
+        const f = elapsed / walk.hopMs;
+        const i = Math.floor(f);
+        if (i >= steps) {
+          const end = at(walk.nodes[steps - 1]);
+          token.group.position.set(end.x, 0.2, end.z);
+          token.walk = null;
+          if (walk.hideAfter) token.group.visible = false;
+          return;
+        }
+        const from = i === 0 ? (walk.from || walk.nodes[0]) : walk.nodes[i - 1];
+        const to = walk.nodes[i];
+        const a = at(from);
+        const b = at(to);
+        const k = f - i;
+        const e = k * k * (3 - 2 * k);
+        const hop = Math.sin(Math.PI * k) * HOP_HEIGHT;
         token.group.position.set(a.x + (b.x - a.x) * e, 0.2 + hop, a.z + (b.z - a.z) * e);
         token.group.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
-        if (t >= 1) {
-          token.group.position.set(b.x, 0.2, b.z);
-          token.walk = null;
-        }
       });
     }
 
@@ -1059,6 +1207,16 @@
 
   BG.yut3d = {
     supported: hasWebGL,
+    /** 테스트·미리보기용: 두 자리 사이에 밟고 지나갈 자리(노드 번호) 목록 */
+    pathNodes: function (from, to, opts) {
+      const o = opts || {};
+      const paths = o.paths || (window.Yut && window.Yut.PATHS) || {};
+      const steps = walkPath(paths, from || null, to || null, !!o.toFinish) || [];
+      return steps.map(function (pos) {
+        const arr = paths[pos.path];
+        return arr ? arr[pos.idx] : null;
+      });
+    },
     mount: function (container, options) {
       if (!container || !window.THREE || !hasWebGL()) return null;
       try {
