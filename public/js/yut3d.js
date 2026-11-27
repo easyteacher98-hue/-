@@ -13,7 +13,34 @@
 
   const WIN = { x: 11.6, z: 11.6 };          // 말판 크기(월드 좌표)
   const CELL = WIN.x / 5;                     // 5x5 격자 한 칸
-  const STICK_ROW_Z = 7.9;                    // 윷가락이 떨어지는 자리
+
+  /**
+   * 화면 비율에 따른 배치를 정합니다.
+   * - 넓은 화면(노트북·태블릿 가로): 윷가락 자리를 말패 오른쪽에 두어 화면을 꿉 채 씁니다.
+   * - 좀은 화면(휴대폰·태블릿 세로): 윷가락 자리를 말판 앞쪽 아래에 둡니다.
+   */
+  function layoutFor(aspect) {
+    if (aspect >= 1.35) {
+      return {
+        wide: true,
+        target: { x: 2.5, z: 0 },
+        halfW: 9.0,
+        halfD: 6.2,
+        mat: { x: 8.3, z: 0, w: 6.6, h: 2.6 },
+        sticks: { x0: 8.3 - 2.1, dx: 1.4, z: 0 },
+        sticksZ: 0
+      };
+    }
+    return {
+      wide: false,
+      target: { x: 0, z: 1.4 },
+      halfW: 6.4,
+      halfD: 9.0,
+      mat: { x: 0, z: 7.7, w: 6.6, h: 2.4 },
+      sticks: { x0: -2.1, dx: 1.4, z: 7.7 },
+      sticksZ: 7.7
+    };
+  }
 
   function hasWebGL() {
     if (typeof document === 'undefined') return false;
@@ -178,18 +205,30 @@
 
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 200);
     const view = { theta: 0, phi: 0.62, radius: 19 };
+    let layout = layoutFor(width / height);
     function updateCamera() {
+      const fov = (camera.fov * Math.PI) / 180;
+      const tan = Math.tan(fov / 2);
+      const aspect = camera.aspect || 1;
+      // 말판+윷가락 자리가 화면 안에 다 들어오도록 거리를 잡습니다.
+      const rH = layout.halfD / tan;
+      const rW = layout.halfW / (tan * aspect);
+      view.radius = Math.max(rH, rW) * 1.04;
       const sinPhi = Math.sin(view.phi);
-      camera.position.set(view.radius * sinPhi * Math.sin(view.theta), view.radius * Math.cos(view.phi), view.radius * sinPhi * Math.cos(view.theta));
-      camera.lookAt(0, 0, 1.6);
+      camera.position.set(
+        layout.target.x + view.radius * sinPhi * Math.sin(view.theta),
+        view.radius * Math.cos(view.phi),
+        layout.target.z + view.radius * sinPhi * Math.cos(view.theta)
+      );
+      camera.lookAt(layout.target.x, 0, layout.target.z);
     }
     updateCamera();
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.82));
-    const sun = new THREE.DirectionalLight(0xffffff, 0.65);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.42);
     sun.position.set(6, 12, 8);
     scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xffe6c8, 0.3);
+    const fill = new THREE.DirectionalLight(0xffe6c8, 0.22);
     fill.position.set(-8, 6, -6);
     scene.add(fill);
 
@@ -231,11 +270,11 @@
       return tex;
     })();
     const mat = new THREE.Mesh(
-      new THREE.PlaneGeometry(6.4, 2.2),
+      new THREE.PlaneGeometry(layout.mat.w, layout.mat.h),
       new THREE.MeshLambertMaterial({ map: matTexture })
     );
     mat.rotation.x = -Math.PI / 2;
-    mat.position.set(0, 0.01, STICK_ROW_Z);
+    mat.position.set(layout.mat.x, 0.01, layout.mat.z);
     scene.add(mat);
 
     /* ----- 윷가락 4개 ----- */
@@ -270,8 +309,8 @@
       });
 
       group.userData.index = i;
-      group.position.set(-2.1 + i * 1.4, 0.17, STICK_ROW_Z);
-      group.userData.rest = { x: -2.1 + i * 1.4, z: STICK_ROW_Z };
+      group.userData.rest = { x: layout.sticks.x0 + i * layout.sticks.dx, z: layout.sticks.z };
+      group.position.set(group.userData.rest.x, 0.17, group.userData.rest.z);
       group.rotation.set(0, 0, 0);
       scene.add(group);
       sticks.push(group);
@@ -479,6 +518,20 @@
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      // 화면 비율이 바뀌면 윷가락 자리와 시점을 다시 잡습니다.
+      const next = layoutFor(w / h);
+      const changed = next.wide !== layout.wide;
+      layout = next;
+      mat.geometry.dispose();
+      mat.geometry = new THREE.PlaneGeometry(layout.mat.w, layout.mat.h);
+      mat.position.set(layout.mat.x, 0.01, layout.mat.z);
+      sticks.forEach(function (stick, i) {
+        stick.userData.rest = { x: layout.sticks.x0 + i * layout.sticks.dx, z: layout.sticks.z };
+        if (changed && !stickAnim.active) {
+          stick.position.set(stick.userData.rest.x, 0.17, stick.userData.rest.z);
+        }
+      });
+      updateCamera();
     }
     let observer = null;
     if (typeof ResizeObserver !== 'undefined') {
