@@ -696,15 +696,13 @@
       roundRectPath(ctx, 18, 18, w - 36, h - 36, 18);
       ctx.stroke();
       ctx.setLineDash([]);
-      // 이름표
-      ctx.fillStyle = 'rgba(255,255,255,0.72)';
-      roundRectPath(ctx, w / 2 - 78, h - 52, 156, 34, 17);
+      // 가운데 안쪽 그림자 (윷가락이 놓일 자리를 살짝 눌린 느낌으로)
+      const inner = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.18, w / 2, h / 2, Math.max(w, h) * 0.62);
+      inner.addColorStop(0, 'rgba(255,255,255,0.28)');
+      inner.addColorStop(1, 'rgba(180,140,90,0.10)');
+      ctx.fillStyle = inner;
+      roundRectPath(ctx, 18, 18, w - 36, h - 36, 18);
       ctx.fill();
-      ctx.fillStyle = 'rgba(150,105,60,0.85)';
-      ctx.font = '900 22px "IBM Plex Sans KR", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('윷가락', w / 2, h - 34);
       const tex = new THREE.CanvasTexture(canvas);
       if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
       return tex;
