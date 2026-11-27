@@ -371,8 +371,12 @@
     const grid = document.querySelector('.group-grid');
     if (!grid) return;
     const rooms = S.rooms.filter(function (r) { return r.gameId === gameId; });
-    grid.innerHTML = rooms.length
-      ? rooms.map(function (r) { return groupCard(gameId, r); }).join('')
+    // 아직 서버 목록이 없으면 1~6모둠 자리를 먼저 보여 줍니다. (누르면 바로 입장)
+    const list = rooms.length
+      ? rooms
+      : ((!BG.net.offline && BG.placeholderRooms) ? BG.placeholderRooms(gameId, 4) : []);
+    grid.innerHTML = list.length
+      ? list.map(function (r) { return groupCard(gameId, r); }).join('')
       : '<div class="empty">모둠 방 정보를 불러오는 중입니다…</div>';
   }
 
@@ -383,9 +387,10 @@
     ensureConnected();
     if (BG.requestRooms) BG.requestRooms(gameId);
     const loadedRooms = S.rooms.filter(function (r) { return r.gameId === gameId; });
-    const rooms = loadedRooms.length || !BG.net.connected
+    // 서버가 없을 때(오프라인)만 빈 목록, 그 밖에는 1~6모둠 자리를 먼저 보여 줍니다.
+    const rooms = loadedRooms.length
       ? loadedRooms
-      : (BG.placeholderRooms ? BG.placeholderRooms(gameId, 4) : []);
+      : ((!BG.net.offline && BG.placeholderRooms) ? BG.placeholderRooms(gameId, 4) : []);
     const cards = rooms.length
       ? rooms.map(function (r) { return groupCard(gameId, r); }).join('')
       : '<div class="empty">모둠 방 정보를 불러오는 중입니다…<br>서버가 꺼져 있다면 아래 <b>AI 봇 연습</b>을 이용해 주세요.</div>';
@@ -1418,7 +1423,11 @@
         points: msg.points[myNumber]
       });
     }
-    if (screenName() === 'mg.' + meta.id + '.room' || screenName() === 'mg.' + meta.id + '.watch') {
+    // 결과 팝업은 내가 보고 있는 방(또는 관전 중인 방)의 결과일 때만 보입니다.
+    // (같은 반 다른 모둠이 끝났다고 내 화면에 결과창이 뜨면 안 됩니다)
+    const myRoomCode = S.room && S.room.code ? String(S.room.code).toUpperCase() : null;
+    const sameRoom = !!myRoomCode && String(msg.code || '').toUpperCase() === myRoomCode;
+    if (sameRoom && (screenName() === 'mg.' + meta.id + '.room' || screenName() === 'mg.' + meta.id + '.watch')) {
       const game = S.room && S.room.game ? S.room.game : null;
       const ranking = (game && game.status === 'finished' && game.ranking) ? game.ranking : (msg.ranking || []);
       resultModal(meta, ranking, {

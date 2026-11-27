@@ -257,9 +257,9 @@
     if (BG.requestRooms) BG.requestRooms('halligalli');
     const loadedGroups = S.rooms.filter(function (r) { return r.gameId === 'halligalli'; });
     // 서버 목록이 도착하기 전에는 1~6모둠 카드를 먼저 보여 줍니다. (누르면 바로 입장)
-    const groups = loadedGroups.length || !BG.net.connected
+    const groups = loadedGroups.length
       ? loadedGroups
-      : (BG.placeholderRooms ? BG.placeholderRooms('halligalli', 4) : []);
+      : ((!BG.net.offline && BG.placeholderRooms) ? BG.placeholderRooms('halligalli', 4) : []);
     const groupCards = groups.length
       ? groups.map(groupCard).join('')
       : '<div class="empty">모둠 방 정보를 불러오는 중입니다…<br>서버가 꺼져 있다면 아래 <b>AI 봇과 연습</b>을 이용해 주세요.</div>';

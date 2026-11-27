@@ -222,9 +222,9 @@
     BG.net.connect();
     if (BG.requestRooms) BG.requestRooms('bluemarble');
     const loadedGroups = S.rooms.filter(function (r) { return r.gameId === 'bluemarble'; });
-    const groups = loadedGroups.length || !BG.net.connected
+    const groups = loadedGroups.length
       ? loadedGroups
-      : (BG.placeholderRooms ? BG.placeholderRooms('bluemarble', 4) : []);
+      : ((!BG.net.offline && BG.placeholderRooms) ? BG.placeholderRooms('bluemarble', 4) : []);
     const cards = groups.length
       ? groups.map(groupCard).join('')
       : '<div class="empty">모둠 방 정보를 불러오는 중입니다…<br>서버가 꺼져 있다면 아래 <b>AI 봇과 연습</b>을 이용해 주세요.</div>';
