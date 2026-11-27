@@ -180,13 +180,14 @@ test('컬러 숫자 카드: 손패 7장과 낼 수 있는 카드가 보이고, �
     assert.equal(room.game.top.type, 'number');
     assert.ok(room.game.players.every(function (p) { return p.count === 7; }));
 
-    const wilds = room.game.hand.filter(function (c) { return c.type === 'wild'; }).map(function (c) { return c.id; });
+    const wilds = room.game.hand.filter(function (c) { return c.type === 'wild' || c.type === 'draw4'; }).map(function (c) { return c.id; });
     const normal = room.game.youPlayable.filter(function (id) { return wilds.indexOf(id) === -1; });
     if (normal.length) {
       const cardId = normal[0];
       joined.client.send({ t: 'action', action: 'play', payload: { cardId: cardId } });
       const after = await joined.client.next(function (m) {
-        return m.t === 'room' && m.room.gameId === 'onecard' && m.room.game && m.room.game.moves >= 1;
+        return m.t === 'room' && m.room.gameId === 'onecard' && m.room.game &&
+          m.room.game.moves >= 1 && m.room.game.hand.length <= 6;
       }, 6000);
       assert.ok(after.room.game.hand.length <= 6);
     } else {

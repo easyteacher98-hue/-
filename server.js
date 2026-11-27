@@ -832,6 +832,7 @@ function createHub(options) {
       rounds: 15,
       options: {},
       botTimer: null,
+      tickTimer: null,
       lastEvent: '대기 중',
       resultRecorded: false,
       lastFlip: null,
@@ -886,6 +887,7 @@ function createHub(options) {
 
   function deleteRoom(room) {
     stopBotLoop(room);
+    stopTickLoop(room);
     rooms.delete(room.key);
   }
 
@@ -894,6 +896,43 @@ function createHub(options) {
       clearInterval(room.botTimer);
       room.botTimer = null;
     }
+  }
+
+  function stopTickLoop(room) {
+    if (room.tickTimer) {
+      clearInterval(room.tickTimer);
+      room.tickTimer = null;
+    }
+  }
+
+  /**
+   * 제한 시간이 있는 게임(끝말잇기)의 시계를 돌립니다.
+   * 봇이 없어도 사람끼리 하는 게임에서 시간 초과를 처리해야 해서 따로 둡니다.
+   */
+  function ensureTickLoop(room) {
+    if (room.tickTimer) return;
+    if (!room.gameModule || typeof room.gameModule.tick !== 'function') return;
+    const game = room.game;
+    if (!game || game.status !== 'playing') return;
+
+    room.tickTimer = setInterval(function () {
+      const current = room.game;
+      if (!current || current.status !== 'playing') {
+        stopTickLoop(room);
+        return;
+      }
+      const out = room.gameModule.tick(current, Date.now());
+      if (!out || !out.changed) return;
+      const last = current.log[current.log.length - 1];
+      touch(room, last ? last.text : null);
+      if (current.status !== 'playing') {
+        room.finishedAt = Date.now();
+        stopBotLoop(room);
+        sendClassResult(room, recordGameResult(room));
+      }
+      broadcastRoom(room);
+    }, 300);
+    if (room.tickTimer.unref) room.tickTimer.unref();
   }
 
   function ensureBotLoop(room) {
@@ -917,7 +956,10 @@ function createHub(options) {
         if (current.status !== 'playing') sendClassResult(room, recordGameResult(room));
         broadcastRoom(room);
       }
-      if (current.status !== 'playing') stopBotLoop(room);
+      if (current.status !== 'playing') {
+        stopBotLoop(room);
+        stopTickLoop(room);
+      }
     }, 120);
     if (room.botTimer.unref) room.botTimer.unref();
   }
@@ -1100,6 +1142,7 @@ function createHub(options) {
   function resetToWaiting(room, options) {
     const opts = options || {};
     stopBotLoop(room);
+    stopTickLoop(room);
     room.game = null;
     room.endWhenTwo = false;
     room.finishedAt = null;
@@ -1357,6 +1400,7 @@ function createHub(options) {
     }
 
     stopBotLoop(room);
+    stopTickLoop(room);
     room.game = room.gameModule.createGame(
       room.seats.map(function (s) { return { id: s.id, name: s.name, number: s.number, isBot: s.isBot }; }),
       { endWhenTwo: room.endWhenTwo, maxRounds: room.rounds, options: Object.assign({}, room.options || {}) }
@@ -1367,6 +1411,7 @@ function createHub(options) {
     const last = room.game.log[room.game.log.length - 1];
     touch(room, last ? last.text : '게임을 시작했습니다.');
     ensureBotLoop(room);
+    ensureTickLoop(room);
     broadcastRoom(room);
     broadcastOverview();
   }
@@ -1863,6 +1908,14 @@ function createHub(options) {
             room.options.initialPoints = points;
           }
         }
+        // 꼬리잡기 끝말잇기: 차례 제한 시간(15·20·30초)
+        if (msg.seconds !== undefined) {
+          const seconds = Number(msg.seconds);
+          if ([15, 20, 30].indexOf(seconds) !== -1) {
+            room.options = room.options || {};
+            room.options.seconds = seconds;
+          }
+        }
         broadcastRoom(room);
         return;
       }
@@ -1945,6 +1998,7 @@ function createHub(options) {
         if (room.game.status !== 'playing') {
           room.finishedAt = Date.now();
           stopBotLoop(room);
+          stopTickLoop(room);
           sendClassResult(room, recordGameResult(room));
         }
         broadcastRoom(room);
@@ -2110,7 +2164,10 @@ function createHub(options) {
   function close() {
     clearInterval(heartbeat);
     if (overviewTimer) clearTimeout(overviewTimer);
-    for (const room of rooms.values()) stopBotLoop(room);
+    for (const room of rooms.values()) {
+      stopBotLoop(room);
+      stopTickLoop(room);
+    }
     // 프로세스가 내려가기 전에 저장 대기 중인 반 목록·기록을 보냅니다. (Redis 가 느려도 최대 5초)
     return flushPersistence().then(function () {
       return new Promise(function (resolve) {

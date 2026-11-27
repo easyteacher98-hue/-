@@ -25,8 +25,9 @@ const oldmaid = require('./oldmaid');
 const janggi = require('./janggi');
 const onecard = require('./onecard');
 const dots = require('./dots');
+const wordchain = require('./wordchain');
 
-const registry = [halligalli, bluemarble, streams, gomoku, liar, yut, rummi, oldmaid, janggi, onecard, dots];
+const registry = [halligalli, bluemarble, streams, gomoku, liar, yut, rummi, oldmaid, janggi, onecard, dots, wordchain];
 
 // 방을 만들지 않는 1인용 게임 (화면에서 바로 즐기고, 최고점·포인트만 서버에 남깁니다)
 const soloGames = [

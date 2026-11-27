@@ -336,14 +336,17 @@ test('장기: 봇끼리 두면 승부가 나고 순위가 정해진다', functio
 
 /* ---------------- 컬러 숫자 카드 ---------------- */
 
-test('컬러 숫자 카드: 52장 덱과 손패 7장, 바닥은 숫자 카드로 시작한다', function () {
-  assert.equal(OneCard.makeDeck().length, 52);
+test('컬러 숫자 카드: 56장 덱(+4 포함)과 손패 7장, 바닥은 숫자 카드로 시작한다', function () {
+  const deck = OneCard.makeDeck();
+  assert.equal(deck.length, 56);
+  assert.equal(deck.filter(function (c) { return c.type === 'draw4'; }).length, 4, '무지개 +4 4장');
+  assert.equal(deck.filter(function (c) { return c.type === 'wild'; }).length, 4, '색 바꾸기 4장');
   const game = new OneCard.Game([
     { id: 'a', name: '가' }, { id: 'b', name: '나' }, { id: 'c', name: '다' }
   ], { seed: 8 });
   game.players.forEach(function (p) { assert.equal(p.hand.length, 7); });
   assert.equal(game.top.type, 'number');
-  assert.equal(game.deck.length, 52 - 21 - 1);
+  assert.equal(game.deck.length, 56 - 21 - 1);
 });
 
 test('컬러 숫자 카드: 같은 색·같은 숫자·같은 특수 카드만 낼 수 있다', function () {
@@ -432,7 +435,9 @@ test('컬러 숫자 카드: 낼 카드가 없으면 1장 뽑고, 봇끼리 끝�
     if (!action) break;
     const result = action.action === 'play'
       ? game.play(action.playerId, action.payload)
-      : game.draw(action.playerId);
+      : action.action === 'say'
+        ? game.say(action.playerId)
+        : game.draw(action.playerId);
     assert.equal(result.ok, true, JSON.stringify(result));
   }
   assert.equal(game.status, 'finished');

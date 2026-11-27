@@ -63,16 +63,16 @@ function click(window, selector) {
 
 /* ---------------- 포털 카테고리 ---------------- */
 
-test('포털: 13개 게임 카드와 학년별 필터 탭이 보이고, 필터가 카드를 걸러 준다', async function () {
+test('포털: 14개 게임 카드와 학년별 필터 탭이 보이고, 필터가 카드를 걸러 준다', async function () {
   const env = await boot();
   const dom = await openPage(env.base + '/?class=DEMO');
   const window = dom.window;
   try {
     await waitFor(function () { return window.document.querySelector('.game-grid'); }, '게임 포털');
     const cards = window.document.querySelectorAll('.game-card');
-    assert.equal(cards.length, 13);
+    assert.equal(cards.length, 14);
     for (const href of ['#/halligalli', '#/bluemarble', '#/streams', '#/gomoku', '#/liar', '#/yut', '#/puzzle',
-      '#/rummi', '#/oldmaid', '#/janggi', '#/onecard', '#/dots', '#/sudoku']) {
+      '#/rummi', '#/oldmaid', '#/janggi', '#/onecard', '#/dots', '#/wordchain', '#/sudoku']) {
       assert.ok(window.document.querySelector('.game-card[href="' + href + '"]'), href + ' 카드');
     }
     const tabs = window.document.querySelectorAll('.filter-tab');
@@ -97,7 +97,7 @@ test('포털: 13개 게임 카드와 학년별 필터 탭이 보이고, 필터�
 
     click(window, '.filter-tab[data-filter="all"]');
     await sleep(100);
-    assert.equal(window.document.querySelectorAll('.game-card').length, 13);
+    assert.equal(window.document.querySelectorAll('.game-card').length, 14);
     assert.deepEqual(dom.__errors.map(String), []);
   } finally {
     window.close();

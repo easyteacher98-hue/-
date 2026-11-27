@@ -264,7 +264,6 @@
       const add = adds[i];
       const target = table.find(function (set) { return set.id === add.setId; });
       if (!target) return { ok: false, reason: 'set_not_found' };
-      if (target.tiles.some(function (t) { return t.joker; })) return { ok: false, reason: 'joker_set' };
       const grabbed = this.takeFromHand({ hand: picked.taken }, add.tileIds || []);
       if (grabbed.missing.length) return { ok: false, reason: 'no_tile' };
       const combined = target.tiles.concat(grabbed.taken);

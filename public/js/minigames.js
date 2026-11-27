@@ -101,8 +101,8 @@
         '같은 숫자 세트: 같은 숫자 다른 색 3~4장을 모아 테이블에 냅니다.',
         '런: 같은 색 연속 숫자 3장 이상을 이어서 냅니다. (예: 초록 4·5·6)',
         '처음 등록은 한 차례에 낸 타일 합이 기준 점수(기본 30점) 이상이어야 합니다. 방장이 15점으로 쉽게 바꿀 수 있어요.',
-        '조커는 한 세트에 1장까지, 어떤 빈자리든 대신할 수 있습니다. 조커가 든 세트에는 타일을 더할 수 없습니다.',
-        '테이블 세트에 내 타일을 이어 붙일 수 있습니다.',
+        '조커는 한 세트에 1장까지, 어떤 빈자리든 대신할 수 있습니다.',
+        '테이블 세트에 내 타일을 이어 붙일 수 있습니다. (조커가 든 세트에도 붙일 수 있어요)',
         '낼 타일이 없으면 더미에서 1장 뽑고 차례를 넘깁니다.',
         '내 패를 먼저 다 내면 우승! 더미가 비면 남은 타일 점수가 가장 낮은 사람이 우승입니다.'
       ]
@@ -149,19 +149,20 @@
       id: 'onecard',
       title: '컬러 숫자 카드',
       emoji: '🎨',
-      desc: '같은 색이나 같은 숫자 카드를 내고, 특수 카드로 판을 흔들어 보세요. 손패를 먼저 0장으로 만들면 승리!',
+      desc: '같은 색이나 같은 숫자 카드를 내고, 점프·+2·무지개 +4로 판을 흔들어요. 1장이 되면 원카드! 를 외치세요!',
       players: '2~5명 · 모둠당 4명',
       capacity: 5,
       minPlayers: 2,
       botSeats: 2,
       accent: 'onecard',
       rules: [
-        '4색(빨강·파랑·노랑·초록) × 1~9 숫자 카드와 특수 카드(점프·방향전환·+2 공격), 색 바꾸기 4장으로 시작합니다.',
+        '4색(빨강·파랑·노랑·초록) × 1~9 숫자 카드와 특수 카드(점프·방향전환·+2 공격), 색 바꾸기 4장, 무지개 +4 4장으로 시작합니다.',
         '한 사람당 7장씩 나눠 받고, 바닥 카드와 같은 색이거나 같은 숫자(또는 같은 특수 카드)를 냅니다.',
         '점프: 다음 사람 차례를 건너뜁니다. 방향전환: 순서가 반대로 바뀝니다. (2명일 때는 점프처럼)',
         '+2 공격: 다음 사람이 2장을 뽑고 건너뜁니다.',
-        '색 바꾸기: 아무 때나 낼 수 있고, 바꿀 색을 고릅니다.',
+        '색 바꾸기·무지개 +4: 아무 때나 낼 수 있고, 바꿀 색을 고릅니다. 무지개 +4는 다음 사람이 4장을 뽑고 건너뜁니다.',
         '낼 카드가 없으면 더미에서 1장 뽑고 차례를 넘깁니다.',
+        '카드가 1장 남을 때는 [원카드!]를 먼저 외쳐야 합니다. 외치지 않으면 카드 2장을 더 받아요.',
         '손패를 먼저 0장으로 만든 사람이 우승! 남은 사람은 카드가 적은 순서로 순위를 정합니다.'
       ]
     },
@@ -182,6 +183,27 @@
         '16칸을 모두 나누면 끝! 가장 많은 땅을 가진 사람이 우승합니다.',
         '요령: 상대에게 3면이 열린 칸을 만들어 주지 마세요.'
       ]
+    },
+    wordchain: {
+      id: 'wordchain',
+      title: '꼬리잡기 끝말잇기',
+      emoji: '🐍',
+      desc: '앞 낱말의 끝 글자로 진짜 우리말 낱말을 이어 말하세요. 사전에 없는 단어·한방 단어는 안 됩니다!',
+      players: '2~5명 · 모둠당 4명',
+      capacity: 5,
+      minPlayers: 2,
+      botSeats: 2,
+      accent: 'wordchain',
+      rules: [
+        '앞사람이 말한 낱말의 마지막 글자로 시작하는 낱말을 이어 말합니다. (예: 사과 → 과자 → 자전거)',
+        '진짜 우리말 낱말(사전에 있는 명사)만 쓸 수 있어요. 1글자·영문·숫자·이상한 신조어는 안 됩니다.',
+        '두음법칙을 인정합니다. (녀↔여, 리↔이, 라↔나 — 예: “원리” 다음에 “이야기”)',
+        '이미 나온 낱말은 다시 쓸 수 없어요.',
+        '다음 사람이 이어 말할 수 없는 낱말(한방 단어, 예: 우라늄)은 낼 수 없어요.',
+        '차례마다 제한 시간(기본 20초)이 있어요. 넘기면 목숨 1개를 잃습니다. 목숨은 3개!',
+        '목숨을 다 잃으면 탈락! 마지막까지 살아남은 사람이 우승합니다.',
+        '정해진 낱말 수(40개)를 다 이으면 가장 많이 말한 사람이 우승합니다.'
+      ]
     }
   };
 
@@ -200,6 +222,7 @@
     resultShown: {},
     authPending: false,
     yut3d: null,
+    wcTimer: null,
     bot: { gameId: null, game: null, driver: null, timer: null, players: 2, running: false, resultShown: false }
   };
 
@@ -207,6 +230,7 @@
   if (BG.onRouteLeave) {
     BG.onRouteLeave(function (from) {
       if (String(from || '').indexOf('/yut') === 0) disposeYut3d();
+      stopWordchainClock();
     });
   }
 
@@ -237,6 +261,7 @@
     if (id === 'janggi') return window.Janggi;
     if (id === 'onecard') return window.OneCard;
     if (id === 'dots') return window.Dots;
+    if (id === 'wordchain') return window.WordChain;
     return null;
   }
 
@@ -490,6 +515,16 @@
           }).join('') +
         '</select></label>';
     }
+    if (meta.id === 'wordchain') {
+      const cur = Number((room.options && room.options.seconds) || 20);
+      if (!isHost) return '<p class="hint">차례 제한 시간: <b>' + cur + '초</b></p>';
+      return '<label class="field">차례 제한 시간' +
+        '<select class="input" data-action="mini.option" data-game="wordchain" data-name="seconds">' +
+          [15, 20, 30].map(function (n) {
+            return '<option value="' + n + '"' + (n === cur ? ' selected' : '') + '>' + n + '초' + (n === 20 ? ' (기본)' : '') + '</option>';
+          }).join('') +
+        '</select></label>';
+    }
     return '';
   }
 
@@ -607,6 +642,7 @@
       else if (meta.id === 'janggi') status = p.side === 'cho' ? '초(먼저)' : '한';
       else if (meta.id === 'onecard') status = '카드 ' + (p.count || 0) + '장';
       else if (meta.id === 'dots') status = (p.score || 0) + '칸';
+      else if (meta.id === 'wordchain') status = '낱말 ' + (p.score || 0) + '개 · 목숨 ' + (p.lives === undefined ? 0 : p.lives);
       return '<div class="mg-player-row' + (game.turnPlayerId === p.id ? ' is-turn' : '') + '">' +
         (BG.avatars ? BG.avatars.html(p, 'xs') : '') +
         '<span class="mg-player-name">' + esc(p.name) + '</span>' +
@@ -684,6 +720,7 @@
    */
   function paintGameScreen(meta, state, room, opts) {
     const screen = 'mg.' + meta.id + '.' + (opts && opts.bot ? 'bot' : (room && room.role === 'spectator' ? 'watch' : 'room'));
+    stopWordchainClock();
     const liveBoard = document.querySelector('.mg-game .mg-board');
     if (meta.id === 'yut' && liveBoard && screenName() === screen) {
       const wrap = document.createElement('div');
@@ -705,6 +742,43 @@
     BG.ui.screen(gameScreenHtml(meta, state, room, opts), screen);
     if (meta.id === 'yut') applyYutBoard(state);
     else disposeYut3d();
+    afterPaint(meta, state);
+  }
+
+  /** 화면을 그린 뒤에 필요한 것(끝말잇기 제한 시간 표시 등)을 시작합니다. */
+  function afterPaint(meta, state) {
+    if (meta.id === 'wordchain') startWordchainClock(state);
+    else stopWordchainClock();
+  }
+
+  /* ---------------- 끝말잇기 제한 시간 표시 ---------------- */
+
+  function stopWordchainClock() {
+    if (S.wcTimer) {
+      clearInterval(S.wcTimer);
+      S.wcTimer = null;
+    }
+  }
+
+  function startWordchainClock(state) {
+    stopWordchainClock();
+    const el = document.querySelector('.mg-wc-timer');
+    if (!el || !state || !state.deadline) return;
+    const end = Number(el.getAttribute('data-deadline'));
+    const serverNow = Number(el.getAttribute('data-now')) || Date.now();
+    const total = Number(el.getAttribute('data-total')) || 20000;
+    const skew = Date.now() - serverNow;
+    const fill = el.querySelector('.mg-wc-timer-fill');
+    const text = el.querySelector('.mg-wc-timer-text');
+    const tick = function () {
+      const left = Math.max(0, end - (Date.now() - skew));
+      if (fill) fill.style.width = Math.max(0, Math.min(100, (left / total) * 100)) + '%';
+      if (text) text.textContent = (left / 1000).toFixed(1) + '초';
+      el.classList.toggle('is-urgent', left <= 5000 && left > 0);
+      el.classList.toggle('is-over', left <= 0);
+    };
+    tick();
+    S.wcTimer = setInterval(tick, 100);
   }
 
   function gameScreenHtml(meta, game, room, opts) {
@@ -784,6 +858,7 @@
     }
     BG.ui.screen(gameScreenHtml(meta, room.game, room, {}), 'mg.' + meta.id + '.room');
     if (meta.id === 'yut') applyYutBoard(room.game);
+    afterPaint(meta, room.game);
   }
 
   function renderWatch(params) {
@@ -934,6 +1009,7 @@
     else if (gameId === 'janggi') game = new engine.Game(players, options);
     else if (gameId === 'onecard') game = new engine.Game(players, options);
     else if (gameId === 'dots') game = new engine.Game(players, options);
+    else if (gameId === 'wordchain') game = new engine.Game(players, Object.assign({ options: { seconds: 20 } }, options));
     if (!game) return;
     S.bot = {
       gameId: gameId,
@@ -967,6 +1043,16 @@
     if (!game || !st.driver) return;
     if (game.status !== 'playing') {
       finishLocal();
+      return;
+    }
+    // 제한 시간이 있는 게임(끝말잇기)은 사람 차례에도 시간 초과를 적용합니다.
+    if (typeof game.tick === 'function' && game.tick(Date.now())) {
+      renderBotScreen(st.gameId);
+      if (game.status === 'finished') {
+        finishLocal();
+        return;
+      }
+      scheduleBotTick(300);
       return;
     }
     const action = st.driver.tick();
@@ -1028,10 +1114,16 @@
     if (gameId === 'onecard') {
       if (action === 'play') return game.play(playerId, p);
       if (action === 'draw') return game.draw(playerId);
+      if (action === 'say') return game.say(playerId);
       return { ok: false, reason: 'unknown_action' };
     }
     if (gameId === 'dots') {
       if (action === 'line') return game.line(playerId, p);
+      return { ok: false, reason: 'unknown_action' };
+    }
+    if (gameId === 'wordchain') {
+      if (action === 'say') return game.say(playerId, p);
+      if (action === 'giveUp') return game.giveUp(playerId);
       return { ok: false, reason: 'unknown_action' };
     }
     return { ok: false, reason: 'unknown_game' };
@@ -1205,6 +1297,7 @@
     if (name === 'category') BG.net.send({ t: 'option', category: el.value });
     else if (name === 'pieces') BG.net.send({ t: 'option', pieces: Number(el.value) });
     else if (name === 'initialPoints') BG.net.send({ t: 'option', initialPoints: Number(el.value) });
+    else if (name === 'seconds') BG.net.send({ t: 'option', seconds: Number(el.value) });
   };
 
   /** 교사 PIN 확인 → 성공하면 관전·방 초기화가 열립니다. */
@@ -1311,13 +1404,20 @@
     playAction('move', { pieceId: el.getAttribute('data-piece') });
   };
 
-  /* 힌트 입력창에서 Enter 를 누르면 바로 말합니다. */
+  /* 힌트·끝말잇기 입력창에서 Enter 를 누르면 바로 보냅니다. */
   document.addEventListener('keydown', function (event) {
     if (event.key !== 'Enter') return;
     const el = event.target;
-    if (!el || el.id !== 'mg-hint-input') return;
-    event.preventDefault();
-    BG.actions['mini.hint']();
+    if (!el) return;
+    if (el.id === 'mg-hint-input') {
+      event.preventDefault();
+      BG.actions['mini.hint']();
+      return;
+    }
+    if (el.id === 'mg-wc-input') {
+      event.preventDefault();
+      BG.actions['mini.wcSay']();
+    }
   });
 
   /* ---------------- 서버 메시지 ---------------- */

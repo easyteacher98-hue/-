@@ -508,7 +508,8 @@
       '</div>' +
       '<div class="mg-rummi-actions">' +
         (myTurn && state.status === 'playing'
-          ? '<button class="btn btn-sm" data-action="mini.rummiMeld"' + (canMeld ? '' : ' disabled') + '>세트로 담기</button>' +
+          ? '<button class="btn btn-sm btn-gold" data-action="mini.rummiHelp">🙋 세트 찾아 주기</button>' +
+            '<button class="btn btn-sm" data-action="mini.rummiMeld"' + (canMeld ? '' : ' disabled') + '>세트로 담기</button>' +
             '<button class="btn btn-sm btn-ghost" data-action="mini.rummiDraw"' + (staged.length ? ' disabled' : '') + '>한 장 뽑기</button>' +
             '<button class="btn btn-sm btn-primary" data-action="mini.rummiSubmit"' + (submitReady ? '' : ' disabled') + '>타일 내기 ▶</button>'
           : '') +
@@ -641,9 +642,9 @@
 
   /* ---------------- 컬러 숫자 카드 ---------------- */
 
-  const OC_LABEL = { skip: '⏭', reverse: '🔄', draw2: '+2', wild: '🌈' };
+  const OC_LABEL = { skip: '⏭', reverse: '🔄', draw2: '+2', wild: '🌈', draw4: '🌈+4' };
 
-  const OC_ARIA = { skip: '점프', reverse: '방향전환', draw2: '+2 공격', wild: '색 바꾸기' };
+  const OC_ARIA = { skip: '점프', reverse: '방향전환', draw2: '+2 공격', wild: '색 바꾸기', draw4: '무지개 +4' };
   const OC_COLOR_NAME = { red: '빨강', blue: '파랑', yellow: '노랑', green: '초록' };
 
   function ocCardHtml(card, opts) {
@@ -670,6 +671,16 @@
       return ocCardHtml(card, { playable: myTurn && playable.indexOf(card.id) !== -1 });
     }).join('') || '<span class="mg-empty-hand">' + (state.youId ? '손패가 비었습니다! 🎉' : '관전 중입니다.') + '</span>';
 
+    let callRow = '';
+    if (state.status === 'playing' && myTurn) {
+      if (state.youCanSay) {
+        callRow = '<div class="mg-oc-call is-me"><button class="btn btn-gold mg-oc-call-btn" data-action="mini.ocSay">📣 원카드! 외치기</button>' +
+          '<span class="hint">카드가 1장 남을 때 먼저 외쳐야 해요. 안 외치면 2장을 더 받아요!</span></div>';
+      } else if (state.youCalled) {
+        callRow = '<div class="mg-oc-call"><span class="mg-oc-called">📣 원카드! 외쳤어요</span><span class="hint">이제 카드를 내면 됩니다.</span></div>';
+      }
+    }
+
     return '<div class="mg-board mg-onecard">' +
       '<div class="mg-turn-bar ' + (myTurn ? 'is-me' : '') + '">' +
         (state.status === 'finished'
@@ -677,6 +688,7 @@
           : '<span class="mg-turn-text">' + (myTurn ? '내 차례! 낼 카드를 고르세요.' : esc(turnName || '') + '님 차례…') + '</span>') +
         '<span class="mg-round-chip">더미 ' + state.deckCount + '장 · ' + (state.direction === 1 ? '↻' : '↺') + '</span>' +
       '</div>' +
+      callRow +
       '<div class="mg-oc-table">' +
         '<div class="mg-oc-discard">' + (state.top ? ocCardHtml(state.top, { static: true }) : '') +
           '<span class="mg-oc-color-chip c-' + state.activeColor + '">' + (COLOR_NAME[state.activeColor] || '') + '</span></div>' +
@@ -690,7 +702,7 @@
       '<div class="mg-rummi-hand-wrap"><div class="mg-rummi-hand-head">내 패 <span class="hint">' + (state.hand || []).length + '장</span></div>' +
         '<div class="mg-oc-hand">' + hand + '</div></div>' +
       (myTurn && state.status === 'playing'
-        ? '<p class="hint" style="margin-top:8px">같은 색이거나 같은 숫자(또는 같은 특수 카드)만 낼 수 있어요. 낼 카드가 없으면 1장 뽑으세요.</p>'
+        ? '<p class="hint" style="margin-top:8px">같은 색이거나 같은 숫자(또는 같은 특수 카드)만 낼 수 있어요. 낼 카드가 없으면 1장 뽑으세요. 카드가 1장 남으면 [원카드!]를 먼저 누르세요.</p>'
         : '') +
     '</div>';
   }
@@ -765,6 +777,106 @@
     '</div>';
   }
 
+  /* ---------------- 꼬리잡기 끝말잇기 ---------------- */
+
+  const wordchainUI = { draft: '', turnNo: -1 };
+
+  function wcHearts(n) {
+    const out = [];
+    for (let i = 0; i < 3; i++) out.push(i < n ? '❤️' : '🤍');
+    return out.join('');
+  }
+
+  function wordchainBoard(state) {
+    const myTurn = state.status === 'playing' && state.turnPlayerId === state.youId;
+    const you = state.players.find(function (p) { return p.id === state.youId; });
+    const turnName = (state.players.find(function (p) { return p.id === state.turnPlayerId; }) || {}).name;
+    if (state.turnNo !== wordchainUI.turnNo) {
+      wordchainUI.draft = '';
+      wordchainUI.turnNo = state.turnNo;
+    }
+    const required = state.required;
+    const prompt = required === null
+      ? '첫 낱말을 자유롭게 말해 보세요!'
+      : '“' + required + '”로 시작하는 낱말';
+
+    let turnLine;
+    if (state.status === 'finished') {
+      turnLine = '🏁 게임 끝! ' + esc((state.players.find(function (p) { return p.id === state.winnerId; }) || {}).name || '') + '님 우승!';
+    } else if (myTurn) {
+      turnLine = '내 차례! ' + esc(prompt) + '을 입력하세요.';
+    } else {
+      turnLine = esc(turnName || '') + '님 차례… (' + esc(prompt) + ')';
+    }
+
+    const timer = state.status === 'playing' && state.deadline
+      ? '<div class="mg-wc-timer" data-deadline="' + state.deadline + '" data-now="' + state.serverNow + '"' +
+          ' data-total="' + (state.turnSeconds * 1000) + '" role="timer" aria-label="남은 시간">' +
+          '<span class="mg-wc-timer-fill"></span><span class="mg-wc-timer-text">' + state.turnSeconds + '초</span></div>'
+      : '';
+
+    const input = state.status === 'playing' && myTurn
+      ? '<div class="mg-wc-form">' +
+          '<input id="mg-wc-input" class="input mg-wc-input" maxlength="10" autocomplete="off" ' +
+            'placeholder="' + (required === null ? '예: 사과' : '‘' + esc(required) + '’로 시작하는 낱말') + '" ' +
+            'value="' + esc(wordchainUI.draft) + '">' +
+          '<button class="btn btn-primary" data-action="mini.wcSay">말하기</button>' +
+        '</div>' +
+        '<p class="hint mg-wc-hint">' +
+          (required === null ? '2글자 이상 진짜 우리말 낱말이면 무엇이든 좋아요.' :
+            '이 글자로 이을 수 있는 낱말이 <b>' + (state.optionsCount || 0) + '개</b> 있어요.') +
+          (state.optionsCount === 0 && required !== null ? ' (이어 말할 낱말이 없어 곧 마무리돼요)' : '') +
+        '</p>'
+      : '';
+
+    let notice = '';
+    if (state.status === 'playing' && you && you.eliminated) {
+      notice = '<div class="mg-wc-notice is-out">💥 탈락했어요. 친구들의 끝말잇기를 지켜봐 주세요.</div>';
+    } else if (state.status === 'playing' && !myTurn) {
+      notice = '<div class="mg-wc-notice">' + esc(turnName || '') + '님이 낱말을 고르는 중…</div>';
+    }
+
+    const chain = state.chain.slice(-10).reverse().map(function (row) {
+      return '<li class="mg-wc-word' + (row.playerId === state.youId ? ' is-me' : '') + '">' +
+        '<span class="mg-wc-word-text">' + esc(row.word) + '</span>' +
+        '<span class="mg-wc-word-by">' + esc(row.name) + '</span></li>';
+    }).join('') || '<li class="mg-wc-empty">아직 나온 낱말이 없어요. 첫 낱말을 기다려요!</li>';
+
+    const players = state.players.map(function (p) {
+      return '<div class="mg-wc-player' + (p.id === state.youId ? ' is-me' : '') +
+        (p.isTurn ? ' is-turn' : '') + (p.eliminated ? ' is-out' : '') + '">' +
+        playerHead(p, { badge: p.isTurn ? '차례' : '' }) +
+        '<span class="mg-wc-hearts" aria-label="목숨 ' + p.lives + '개">' + wcHearts(p.lives) + '</span>' +
+        '<span class="mg-wc-score">' + p.score + '개</span>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="mg-board mg-wordchain">' +
+      '<div class="mg-turn-bar ' + (myTurn ? 'is-me' : '') + '">' +
+        '<span class="mg-turn-text">' + turnLine + '</span>' +
+        '<span class="mg-round-chip">' + state.turnNo + '/' + state.maxTurns + ' 낱말</span>' +
+      '</div>' +
+      timer +
+      '<div class="mg-wc-stage">' +
+        '<div class="mg-wc-target' + (required === null ? ' is-free' : '') + '">' +
+          '<span class="mg-wc-target-label">' + (required === null ? '첫 낱말' : '이 글자로 시작') + '</span>' +
+          '<span class="mg-wc-target-char">' + (required === null ? '🐍' : esc(required)) + '</span>' +
+        '</div>' +
+        '<div class="mg-wc-last">' +
+          (state.chain.length
+            ? '<span class="mg-wc-last-label">마지막 낱말</span><b>' + esc(state.chain[state.chain.length - 1].word) + '</b>' +
+              '<span class="mg-wc-last-by">' + esc(state.chain[state.chain.length - 1].name) + '</span>'
+            : '<span class="mg-wc-last-label">아직 없음</span>') +
+        '</div>' +
+      '</div>' +
+      input +
+      notice +
+      '<ol class="mg-wc-chain">' + chain + '</ol>' +
+      '<div class="mg-wc-players">' + players + '</div>' +
+      '<p class="hint mg-wc-foot">사전에 있는 우리말 낱말 ' + state.dictionaryCount + '개 · 2글자 이상 · 이미 나온 낱말은 안 돼요.</p>' +
+    '</div>';
+  }
+
   BG.miniBoards = {
     SEAT_COLORS: SEAT_COLORS,
     colorOf: colorOf,
@@ -777,7 +889,8 @@
     oldmaid: oldmaidBoard,
     janggi: janggiBoard,
     onecard: onecardBoard,
-    dots: dotsBoard
+    dots: dotsBoard,
+    wordchain: wordchainBoard
   };
 
   /* ---------------- 새 게임 동작 ---------------- */
@@ -822,13 +935,51 @@
     const set = (state.table || []).find(function (s) { return s.id === setId; });
     if (!set) return;
     if (rummiUI.selected.length === 0) { toast('붙일 타일을 먼저 골라 주세요.'); return; }
-    if (set.tiles.some(function (t) { return t.joker; })) { toast('조커가 들어간 세트에는 붙일 수 없습니다.'); return; }
     const tiles = rummiUI.selected.map(function (id) { return handTileOf(state, id); }).filter(Boolean);
     const check = window.Rummi && window.Rummi.validateSet(set.tiles.concat(tiles));
     if (!check || !check.ok) { toast('이 세트에 붙이면 규칙에 맞지 않습니다.'); return; }
     rummiUI.pendingAdds.push({ setId: setId, tileIds: rummiUI.selected.slice() });
     rummiUI.selected = [];
     rerender();
+  };
+
+  /** 학생이 막혔을 때: 지금 손패에서 낼 수 있는 세트를 찾아 자동으로 담아 줍니다. */
+  BG.actions['mini.rummiHelp'] = function () {
+    const state = stateNow();
+    if (!state) return;
+    if (state.status !== 'playing' || state.turnPlayerId !== state.youId) {
+      toast('내 차례에만 도움을 받을 수 있어요.');
+      return;
+    }
+    const sets = window.Rummi && window.Rummi.findSets ? window.Rummi.findSets(state.hand || []) : [];
+    const usable = sets.filter(function (set) {
+      return window.Rummi.validateSet(set.tiles).ok;
+    });
+    if (!usable.length) {
+      toast('지금 손패로 만들 수 있는 세트가 없어요. [한 장 뽑기]를 눌러 보세요.');
+      return;
+    }
+    // 겹치지 않는 세트를 두 개까지 골라 담습니다. (처음 등록이면 기준 점수를 넘도록)
+    const used = {};
+    const picked = [];
+    let sum = 0;
+    usable.forEach(function (set) {
+      if (picked.length >= 2) return;
+      if (set.tiles.some(function (t) { return used[t.id]; })) return;
+      picked.push(set);
+      set.tiles.forEach(function (t) { used[t.id] = true; });
+      sum += window.Rummi.pointsOf(set.tiles);
+    });
+    rummiUI.selected = [];
+    rummiUI.pendingMelds = picked.map(function (set) {
+      return set.tiles.map(function (t) { return t.id; });
+    });
+    rerender();
+    if (!state.youMelded && sum < state.initialPoints) {
+      toast('세트를 담았어요. ' + (state.initialPoints - sum) + '점 더 필요해요.', 'ok');
+    } else {
+      toast('낼 수 있는 세트 ' + picked.length + '개를 담았어요. [타일 내기]를 눌러 보세요!', 'ok');
+    }
   };
 
   BG.actions['mini.rummiReset'] = function () {
@@ -888,7 +1039,7 @@
     if (!cardId || !state) return;
     const card = (state.hand || []).find(function (c) { return c.id === cardId; });
     if (!card) return;
-    if (card.type === 'wild') {
+    if (window.OneCard && window.OneCard.isWildType && window.OneCard.isWildType(card)) {
       const colors = [
         { id: 'red', name: '빨강' }, { id: 'blue', name: '파랑' },
         { id: 'yellow', name: '노랑' }, { id: 'green', name: '초록' }
@@ -916,10 +1067,37 @@
     if (BG.mini && BG.mini.playAction) BG.mini.playAction('draw', {});
   };
 
+  BG.actions['mini.ocSay'] = function () {
+    if (BG.mini && BG.mini.playAction) BG.mini.playAction('say', {});
+  };
+
   BG.actions['mini.dotsLine'] = function (el) {
     const type = el.getAttribute('data-type');
     const x = Number(el.getAttribute('data-x'));
     const y = Number(el.getAttribute('data-y'));
     if (BG.mini && BG.mini.playAction) BG.mini.playAction('line', { type: type, x: x, y: y });
   };
+
+  /* ----- 꼬리잡기 끝말잇기 ----- */
+
+  BG.actions['mini.wcSay'] = function () {
+    const input = document.getElementById('mg-wc-input');
+    const text = String(input ? input.value : '').trim();
+    if (!text) {
+      toast('낱말을 입력해 주세요.');
+      if (input) input.focus();
+      return;
+    }
+    wordchainUI.draft = text;
+    if (BG.mini && BG.mini.playAction) BG.mini.playAction('say', { text: text });
+  };
+
+  /* 끝말잇기 입력칸: 다시 그려도 입력 중인 낱말이 지워지지 않게 기억합니다. */
+  document.addEventListener('input', function (event) {
+    const el = event.target;
+    if (!el || el.id !== 'mg-wc-input') return;
+    wordchainUI.draft = String(el.value || '');
+  });
+
+  BG.wordchainDraft = function () { return wordchainUI.draft; };
 })();

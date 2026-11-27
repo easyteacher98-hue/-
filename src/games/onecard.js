@@ -15,13 +15,14 @@ const REASON_TEXT = {
   no_card: '내 손에 없는 카드입니다.',
   cannot_play: '같은 색이거나 같은 숫자(또는 같은 특수 카드)만 낼 수 있습니다.',
   need_color: '색 바꾸기 카드는 바꿀 색을 골라야 합니다.',
+  too_many_cards: '카드가 1장 남을 때 원카드! 를 외칠 수 있어요.',
   unknown_action: '할 수 없는 동작입니다.'
 };
 
 module.exports = {
   id: 'onecard',
   title: '컬러 숫자 카드',
-  subtitle: '같은 색·같은 숫자를 내고 손패를 먼저 0장으로!',
+  subtitle: '같은 색·같은 숫자를 내고, 원카드! 를 외치며 손패를 먼저 0장으로!',
   emoji: '🎨',
   status: 'ready',
   mode: 'multi',
@@ -33,12 +34,13 @@ module.exports = {
   groupCount: 6,
   botNames: OC.BOT_NAMES,
   rules: [
-    '4색(빨강·파랑·노랑·초록) × 1~9 숫자 카드와 특수 카드(점프·방향전환·+2 공격), 색 바꾸기 4장으로 시작합니다.',
+    '4색(빨강·파랑·노랑·초록) × 1~9 숫자 카드와 특수 카드(점프·방향전환·+2 공격), 색 바꾸기 4장, 무지개 +4 4장으로 시작합니다.',
     '한 사람당 7장씩 나눠 받고, 바닥 카드와 같은 색이거나 같은 숫자(또는 같은 특수 카드)를 냅니다.',
     '점프: 다음 사람 차례를 건너뜁니다. 방향전환: 순서가 반대로 바뀝니다. (2명일 때는 점프처럼)',
     '+2 공격: 다음 사람이 2장을 뽑고 건너뜁니다.',
-    '색 바꾸기: 아무 때나 낼 수 있고, 바꿀 색을 고릅니다.',
+    '색 바꾸기·무지개 +4: 아무 때나 낼 수 있고, 바꿀 색을 고릅니다. 무지개 +4는 다음 사람이 4장을 뽑고 건너뜁니다.',
     '낼 카드가 없으면 더미에서 1장 뽑고 차례를 넘깁니다.',
+    '카드가 1장 남을 때는 [원카드!]를 먼저 외쳐야 합니다. 외치지 않으면 카드 2장을 더 받아요.',
     '손패를 먼저 0장으로 만든 사람이 우승! 남은 사람은 카드가 적은 순서로 순위를 정합니다.'
   ],
 
@@ -60,6 +62,7 @@ module.exports = {
   applyAction(game, playerId, action, payload) {
     if (action === 'play') return game.play(playerId, payload);
     if (action === 'draw') return game.draw(playerId);
+    if (action === 'say') return game.say(playerId);
     return { ok: false, reason: 'unknown_action' };
   },
 

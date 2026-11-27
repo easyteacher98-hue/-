@@ -208,7 +208,7 @@ test('전통 장기: 봇 연습에서 병을 눌러 앞으로 움직이고 판�
 
 /* ---------------- 컬러 숫자 카드 ---------------- */
 
-test('컬러 숫자 카드: 봇 연습에서 낼 수 있는 카드를 내면 손패가 줄어든다', async function () {
+test('컬러 숫자 카드: 봇 연습에서 원카드! 를 외우고 낼 수 있는 카드를 내면 손패가 줄어든다', async function () {
   const env = await boot();
   const dom = await openPage(env.base + '/?class=DEMO');
   const window = dom.window;
@@ -217,11 +217,15 @@ test('컬러 숫자 카드: 봇 연습에서 낼 수 있는 카드를 내면 손
     await enterBot(window, 'onecard', 2);
     assert.equal(window.document.querySelectorAll('.mg-oc-hand .mg-oc-card').length, 7, '손패 7장');
     const game = window.BG.mini.state.bot.game;
-    // 첫 카드를 같은 색 숫자 카드로 바꿔 확실히 낼 수 있게 합니다.
+    // 같은 색 숫자 카드 두 장으로 바꿔, 한 장을 내면 1장이 되게 합니다.
     game.players[0].hand = [{ id: 'testCard', color: game.activeColor, type: 'number', value: 9 }];
     game.players[0].hand.push({ id: 'extra', color: game.activeColor, type: 'number', value: 8 });
     window.BG.mini.rerender();
     await sleep(60);
+    // 1장이 되기 전에 원카드! 를 외칩니다.
+    click(window, '[data-action="mini.ocSay"]');
+    await waitFor(function () { return window.BG.mini.state.bot.game.called.me === true; }, '원카드 외치기');
+    assert.ok(window.document.querySelector('.mg-oc-called'), '외쳤다는 표시');
     click(window, '.mg-oc-card[data-card="testCard"]');
     await waitFor(function () {
       const g = window.BG.mini.state.bot.game;

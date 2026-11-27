@@ -15,7 +15,7 @@
   const CELL = WIN.x / 5;                     // 5x5 격자 한 칸
 
   /* 말판 그림의 여백 비율 — 그림의 자리(점)와 3D 말 위치를 똑같이 맞추는 데 씁니다. */
-  const BOARD_MARGIN = 0.075;
+  const BOARD_MARGIN = 0.105;
 
   /**
    * 화면 비율에 따른 배치를 정합니다.
@@ -56,34 +56,107 @@
   }
 
   /* ---------------- 말판 그림 ---------------- */
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr);
+    ctx.quadraticCurveTo(x, y, x + rr, y);
+    ctx.closePath();
+  }
+
+  function starPath(ctx, cx, cy, outer, inner, points) {
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+      const r = i % 2 === 0 ? outer : inner;
+      const a = -Math.PI / 2 + (i * Math.PI) / points;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
   function drawBoardTexture(THREE, nodePos, paths) {
-    const size = 1024;
+    const size = 1200;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
 
-    // 바탕 (나무색)
-    ctx.fillStyle = '#f6e6c8';
-    ctx.fillRect(0, 0, size, size);
-    const grad = ctx.createRadialGradient(size / 2, size / 2, size * 0.1, size / 2, size / 2, size * 0.7);
-    grad.addColorStop(0, 'rgba(255,255,255,0.35)');
-    grad.addColorStop(1, 'rgba(196,150,96,0.18)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
+    /* 1) 따뜻한 원목 프레임 */
+    const wood = ctx.createLinearGradient(0, 0, size, size);
+    wood.addColorStop(0, '#ecc79a');
+    wood.addColorStop(0.42, '#d9a76c');
+    wood.addColorStop(1, '#c48d51');
+    ctx.fillStyle = wood;
+    roundRectPath(ctx, 0, 0, size, size, 46);
+    ctx.fill();
 
-    // 나뭇결
-    ctx.strokeStyle = 'rgba(181,132,74,0.10)';
+    // 나뭇결 (프레임에만)
+    ctx.save();
+    roundRectPath(ctx, 0, 0, size, size, 46);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(150,98,48,0.16)';
     ctx.lineWidth = 3;
-    for (let i = 0; i < 22; i++) {
+    for (let i = 0; i < 26; i++) {
+      const y = (i + 0.5) * (size / 26);
       ctx.beginPath();
-      const y = (i + 0.5) * (size / 22);
       ctx.moveTo(0, y);
-      for (let x = 0; x <= size; x += 32) {
-        ctx.lineTo(x, y + Math.sin((x / size) * Math.PI * 6 + i) * 6);
+      for (let x = 0; x <= size; x += 40) {
+        ctx.lineTo(x, y + Math.sin((x / size) * Math.PI * 7 + i) * 7);
       }
       ctx.stroke();
     }
+    // 프레임 하이라이트
+    ctx.strokeStyle = 'rgba(255,246,228,0.5)';
+    ctx.lineWidth = 6;
+    roundRectPath(ctx, 10, 10, size - 20, size - 20, 40);
+    ctx.stroke();
+    ctx.restore();
+
+    /* 2) 포근한 펠트 판 */
+    const inset = size * 0.072;
+    const inner = size - inset * 2;
+    ctx.save();
+    roundRectPath(ctx, inset, inset, inner, inner, 30);
+    ctx.clip();
+    const felt = ctx.createRadialGradient(size * 0.44, size * 0.38, size * 0.05, size * 0.5, size * 0.5, size * 0.74);
+    felt.addColorStop(0, '#fffdf6');
+    felt.addColorStop(0.62, '#fdf4e2');
+    felt.addColorStop(1, '#f5e3c6');
+    ctx.fillStyle = felt;
+    ctx.fillRect(inset, inset, inner, inner);
+    // 펠트 결 (아주 옅은 점)
+    for (let i = 0; i < 2200; i++) {
+      const x = inset + Math.random() * inner;
+      const y = inset + Math.random() * inner;
+      ctx.fillStyle = i % 3 === 0 ? 'rgba(180,140,90,0.05)' : 'rgba(255,255,255,0.12)';
+      ctx.fillRect(x, y, 2.4, 2.4);
+    }
+    // 안쪽 그림자
+    ctx.strokeStyle = 'rgba(150,105,60,0.20)';
+    ctx.lineWidth = 30;
+    roundRectPath(ctx, inset + 15, inset + 15, inner - 30, inner - 30, 24);
+    ctx.stroke();
+    ctx.restore();
+
+    // 펠트 테두리 재봉선
+    ctx.save();
+    ctx.setLineDash([2, 16]);
+    ctx.strokeStyle = 'rgba(198,150,98,0.55)';
+    ctx.lineWidth = 4;
+    roundRectPath(ctx, inset + 26, inset + 26, inner - 52, inner - 52, 22);
+    ctx.stroke();
+    ctx.restore();
 
     const margin = size * BOARD_MARGIN;
     const span = size - margin * 2;
@@ -91,70 +164,164 @@
       return { x: margin + (p.x / 5) * span, y: margin + (p.y / 5) * span };
     };
 
-    // 판 테두리
-    ctx.strokeStyle = '#a9744a';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(margin * 0.55, margin * 0.55, size - margin * 1.1, size - margin * 1.1);
-
-    // 길 (패스)
-    const drawn = {};
-    const line = function (a, b) {
+    /* 3) 길 — 두꺼운 길 + 밝은 안쪽 선 */
+    const segs = [];
+    const seen = {};
+    const addSeg = function (a, b) {
       const key = Math.min(a, b) + ':' + Math.max(a, b);
-      if (drawn[key]) return;
-      drawn[key] = true;
-      const p1 = toPx(nodePos[a]);
-      const p2 = toPx(nodePos[b]);
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
+      if (seen[key]) return;
+      seen[key] = true;
+      segs.push([a, b]);
     };
-    ctx.strokeStyle = '#b98a5a';
-    ctx.lineWidth = 7;
-    ctx.lineCap = 'round';
     Object.keys(paths).forEach(function (name) {
       const path = paths[name];
-      for (let i = 0; i < path.length - 1; i++) line(path[i], path[i + 1]);
+      for (let i = 0; i < path.length - 1; i++) addSeg(path[i], path[i + 1]);
     });
-    // 바깥 둘레 마지막 연결(19 → 0)
-    line(19, 0);
+    addSeg(19, 0);
 
-    // 자리(점)
+    const strokeSegs = function () {
+      segs.forEach(function (pair) {
+        const p1 = toPx(nodePos[pair[0]]);
+        const p2 = toPx(nodePos[pair[1]]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      });
+    };
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // 3-1) 길 그림자
+    ctx.save();
+    ctx.translate(0, 8);
+    ctx.strokeStyle = 'rgba(140,96,52,0.20)';
+    ctx.lineWidth = 52;
+    strokeSegs();
+    ctx.restore();
+
+    // 3-2) 길 바탕 (따뜻한 캐러멜)
+    ctx.strokeStyle = '#f2c891';
+    ctx.lineWidth = 46;
+    strokeSegs();
+
+    // 3-3) 길 윗면 (크림색 띠 — 구시대적인 가는 선 대신 도톰한 이중선 느낌)
+    ctx.strokeStyle = '#ffedcf';
+    ctx.lineWidth = 26;
+    strokeSegs();
+
+    // 3-4) 가운데 스티치 점선
+    ctx.save();
+    ctx.setLineDash([1, 22]);
+    ctx.strokeStyle = 'rgba(196,133,74,0.55)';
+    ctx.lineWidth = 5;
+    strokeSegs();
+    ctx.restore();
+
+    /* 4) 자리(칸) — 도톰한 칩 */
+    const chip = function (p, r, style) {
+      // 그림자
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 5, r + 4, r + 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(130,88,48,0.20)';
+      ctx.fill();
+      // 바깥 테 (크림)
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r + 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#fffdf7';
+      ctx.fill();
+      // 알맹이 (위에서 빛이 드는 느낌)
+      const g = ctx.createRadialGradient(p.x - r * 0.35, p.y - r * 0.45, r * 0.15, p.x, p.y, r);
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.45, style.light || '#fff6e4');
+      g.addColorStop(1, style.fill || '#f6ddb6');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+      // 링
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r - 6, 0, Math.PI * 2);
+      ctx.strokeStyle = style.ring || 'rgba(206,160,104,0.55)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    };
+
+    const chipR = 26;
+    const bigR = 38;
     Object.keys(nodePos).forEach(function (key) {
       const node = Number(key);
       const p = toPx(nodePos[key]);
-      const big = node === 0 || node === 5 || node === 10 || node === 15 || node === 20;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, big ? 16 : 11, 0, Math.PI * 2);
-      ctx.fillStyle = big ? '#8a5b34' : '#c79869';
-      ctx.fill();
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = '#fff8ec';
-      ctx.stroke();
+      if (node === 0) {
+        chip(p, bigR, { fill: '#cdefdc', light: '#f2fff8', ring: '#4fb083' });
+        // 출발 깃발
+        ctx.fillStyle = '#2f7d58';
+        ctx.fillRect(p.x - 2, p.y - 17, 4, 30);
+        ctx.beginPath();
+        ctx.moveTo(p.x + 2, p.y - 17);
+        ctx.lineTo(p.x + 20, p.y - 10);
+        ctx.lineTo(p.x + 2, p.y - 3);
+        ctx.closePath();
+        ctx.fillStyle = '#4fb083';
+        ctx.fill();
+      } else if (node === 20) {
+        chip(p, bigR, { fill: '#ffe4ac', light: '#fffaf0', ring: '#e0a53a' });
+        starPath(ctx, p.x, p.y, 20, 9, 5);
+        ctx.fillStyle = '#f2b543';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      } else if (node === 5 || node === 10 || node === 15) {
+        chip(p, bigR, { fill: '#ffd9c6', light: '#fff4ee', ring: '#ef8a5f' });
+        // 모서리 표시 (꽃잎 점)
+        for (let k = 0; k < 4; k++) {
+          const a = (Math.PI / 2) * k + Math.PI / 4;
+          ctx.beginPath();
+          ctx.arc(p.x + Math.cos(a) * 13, p.y + Math.sin(a) * 13, 4.4, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(224,110,76,0.75)';
+          ctx.fill();
+        }
+      } else {
+        chip(p, chipR, {});
+      }
     });
 
-    // 글자
-    ctx.fillStyle = '#6b4526';
-    ctx.font = 'bold 34px "IBM Plex Sans KR", sans-serif';
+    // 출발 깃대는 칩 위에 한 번 더 (칩에 가리지 않게)
+
+    /* 5) 글자 */
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const start = toPx(nodePos[0]);
-    ctx.fillText('출발', start.x + 58, start.y + 44);
-    const mid = toPx(nodePos[20]);
-    ctx.font = 'bold 28px "IBM Plex Sans KR", sans-serif';
-    ctx.fillStyle = 'rgba(107,69,38,0.75)';
-    ctx.fillText('가운데', mid.x, mid.y - 30);
+    ctx.font = '900 22px "IBM Plex Sans KR", sans-serif';
+    ctx.fillStyle = '#2f7d58';
+    ctx.fillText('출발', start.x, start.y + bigR + 26);
 
-    // 가운데 문양
-    ctx.beginPath();
-    ctx.arc(mid.x, mid.y, 40, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(138,91,52,0.35)';
-    ctx.lineWidth = 5;
-    ctx.stroke();
+    const mid = toPx(nodePos[20]);
+    ctx.font = '900 24px "IBM Plex Sans KR", sans-serif';
+    ctx.fillStyle = 'rgba(160,108,40,0.9)';
+    ctx.fillText('가운데', mid.x, mid.y - bigR - 22);
+
+    /* 6) 프레임 명판 */
+    ctx.font = '700 24px "IBM Plex Sans KR", sans-serif';
+    ctx.fillStyle = 'rgba(255,247,232,0.72)';
+    ctx.fillText('보드게임천국 · 윷놀이', size / 2, size - inset / 2 + 2);
+
+    // 프레임 장식 나사
+    [[46, 46], [size - 46, 46], [46, size - 46], [size - 46, size - 46]].forEach(function (pos) {
+      ctx.beginPath();
+      ctx.arc(pos[0], pos[1], 7, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,250,238,0.55)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(150,100,55,0.35)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
 
     const texture = new THREE.CanvasTexture(canvas);
     if (THREE.sRGBEncoding !== undefined) texture.encoding = THREE.sRGBEncoding;
-    texture.anisotropy = 4;
+    texture.anisotropy = 8;
     return texture;
   }
 
@@ -204,7 +371,8 @@
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#fdf1e3');
+    // 배경은 CSS 그라데이션을 그대로 보이게 둡니다. (alpha: true)
+    scene.background = null;
 
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 200);
     const view = { theta: 0, phi: 0.62, radius: 19 };
@@ -235,49 +403,94 @@
     fill.position.set(-8, 6, -6);
     scene.add(fill);
 
+    /* ----- 부드러운 그림자 만들기 ----- */
+    const softShadowTex = (function () {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 256;
+      const x = c.getContext('2d');
+      const g = x.createRadialGradient(128, 128, 10, 128, 128, 126);
+      g.addColorStop(0, 'rgba(120,82,45,0.34)');
+      g.addColorStop(0.55, 'rgba(120,82,45,0.16)');
+      g.addColorStop(1, 'rgba(120,82,45,0)');
+      x.fillStyle = g;
+      x.fillRect(0, 0, 256, 256);
+      return new THREE.CanvasTexture(c);
+    })();
+
+    const floorShadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(WIN.x * 1.62, WIN.z * 1.62),
+      new THREE.MeshBasicMaterial({ map: softShadowTex, transparent: true, depthWrite: false })
+    );
+    floorShadow.rotation.x = -Math.PI / 2;
+    floorShadow.position.y = -0.735;
+    scene.add(floorShadow);
+
     // 말판
     const boardGroup = new THREE.Group();
     const boardTexture = drawBoardTexture(THREE, nodePos, paths);
-    const boardGeo = new THREE.BoxGeometry(WIN.x, 0.34, WIN.z);
+    const boardGeo = new THREE.BoxGeometry(WIN.x, 0.55, WIN.z);
     const boardMat = [
-      new THREE.MeshLambertMaterial({ color: '#c89a63' }),
-      new THREE.MeshLambertMaterial({ color: '#c89a63' }),
+      new THREE.MeshLambertMaterial({ color: '#c08a52' }),
+      new THREE.MeshLambertMaterial({ color: '#b8813f' }),
       new THREE.MeshLambertMaterial({ map: boardTexture }),
-      new THREE.MeshLambertMaterial({ color: '#b98a5a' }),
-      new THREE.MeshLambertMaterial({ color: '#c89a63' }),
-      new THREE.MeshLambertMaterial({ color: '#c89a63' })
+      new THREE.MeshLambertMaterial({ color: '#a9744a' }),
+      new THREE.MeshLambertMaterial({ color: '#bb8348' }),
+      new THREE.MeshLambertMaterial({ color: '#bb8348' })
     ];
     const boardMesh = new THREE.Mesh(boardGeo, boardMat);
-    boardMesh.position.y = -0.17;
+    boardMesh.position.y = -0.275;
     boardGroup.add(boardMesh);
+
+    // 한 단 아래 받침 (원목 테두리가 두툼해 보이게)
+    const rimGeo = new THREE.BoxGeometry(WIN.x + 0.46, 0.16, WIN.z + 0.46);
+    const rimMat = new THREE.MeshLambertMaterial({ color: '#a9744a' });
+    const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+    rimMesh.position.y = -0.63;
+    boardGroup.add(rimMesh);
     scene.add(boardGroup);
 
-    // 윷가락 놓는 자리(매트)
+    // 윷가락 놓는 자리(펠트 매트)
     const matTexture = (function () {
-      const size = 512;
+      const w = 640;
+      const h = 220;
       const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = Math.round(size * 0.34);
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#efe0c6';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = 'rgba(169,116,74,0.45)';
-      ctx.lineWidth = 6;
-      ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-      ctx.fillStyle = 'rgba(107,69,38,0.55)';
-      ctx.font = 'bold 34px "IBM Plex Sans KR", sans-serif';
+      // 펠트 바탕
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#fff9ee');
+      g.addColorStop(1, '#f4e4c8');
+      ctx.fillStyle = g;
+      roundRectPath(ctx, 4, 4, w - 8, h - 8, 26);
+      ctx.fill();
+      // 재봉선
+      ctx.setLineDash([2, 12]);
+      ctx.strokeStyle = 'rgba(198,150,98,0.65)';
+      ctx.lineWidth = 3;
+      roundRectPath(ctx, 18, 18, w - 36, h - 36, 18);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // 이름표
+      ctx.fillStyle = 'rgba(255,255,255,0.72)';
+      roundRectPath(ctx, w / 2 - 78, h - 52, 156, 34, 17);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(150,105,60,0.85)';
+      ctx.font = '900 22px "IBM Plex Sans KR", sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('윷가락', canvas.width / 2, canvas.height - 24);
+      ctx.textBaseline = 'middle';
+      ctx.fillText('윷가락', w / 2, h - 34);
       const tex = new THREE.CanvasTexture(canvas);
       if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
       return tex;
     })();
     const mat = new THREE.Mesh(
       new THREE.PlaneGeometry(layout.mat.w, layout.mat.h),
-      new THREE.MeshLambertMaterial({ map: matTexture })
+      new THREE.MeshLambertMaterial({ map: matTexture, transparent: true })
     );
     mat.rotation.x = -Math.PI / 2;
-    mat.position.set(layout.mat.x, 0.01, layout.mat.z);
+    mat.position.set(layout.mat.x, 0.012, layout.mat.z);
     scene.add(mat);
 
     /* ----- 윷가락 4개 ----- */
@@ -330,26 +543,47 @@
 
     function makeToken(piece, player, color) {
       const group = new THREE.Group();
+      // 말 아래 부드러운 그림자
+      const shadow = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.16, 1.16),
+        new THREE.MeshBasicMaterial({ map: softShadowTex, transparent: true, depthWrite: false, opacity: 0.9 })
+      );
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.y = 0.005;
+      group.add(shadow);
       const base = new THREE.Mesh(
         new THREE.CylinderGeometry(0.42, 0.48, 0.16, 20),
         new THREE.MeshLambertMaterial({ color: color })
       );
       base.position.y = 0.08;
       group.add(base);
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.36, 0.045, 8, 24),
+        new THREE.MeshLambertMaterial({ color: '#fffaf0' })
+      );
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.17;
+      group.add(ring);
       const body = new THREE.Mesh(
-        new THREE.SphereGeometry(0.3, 16, 12),
+        new THREE.SphereGeometry(0.3, 18, 14),
         new THREE.MeshLambertMaterial({ color: color })
       );
-      body.position.y = 0.34;
+      body.position.y = 0.36;
       group.add(body);
+      const shine = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 10, 8),
+        new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.7 })
+      );
+      shine.position.set(-0.11, 0.47, -0.06);
+      group.add(shine);
       const cap = new THREE.Mesh(
-        new THREE.SphereGeometry(0.14, 12, 10),
+        new THREE.SphereGeometry(0.13, 12, 10),
         new THREE.MeshLambertMaterial({ color: '#fff8ec' })
       );
-      cap.position.y = 0.56;
+      cap.position.y = 0.58;
       group.add(cap);
       const label = labelSprite(THREE, player.number || (player.name || '').slice(0, 2), '#4a2f1a');
-      label.position.y = 1.02;
+      label.position.y = 1.06;
       label.scale.set(0.62, 0.62, 1);
       group.add(label);
       group.visible = false;
@@ -577,6 +811,11 @@
       tokens.clear();
       boardGeo.dispose();
       boardTexture.dispose();
+      rimGeo.dispose();
+      mat.geometry.dispose();
+      if (matTexture && matTexture.dispose) matTexture.dispose();
+      if (softShadowTex && softShadowTex.dispose) softShadowTex.dispose();
+      floorShadow.geometry.dispose();
       renderer.dispose();
       if (canvasEl.parentNode) canvasEl.parentNode.removeChild(canvasEl);
     }
