@@ -1032,7 +1032,7 @@
       return;
     }
     if (!teacherReady()) {
-      BG.ui.screen(teacherGateHtml(), 'bm.teacher');
+      BG.showTeacherGate(teacherGateHtml(), 'bm.teacher');
       return;
     }
 
@@ -1340,7 +1340,7 @@
 
   BG.actions['bm.teacherAuth'] = function () {
     const el = document.getElementById('teacher-pin');
-    const pin = el ? String(el.value || '').replace(/[^0-9]/g, '') : '';
+    const pin = el ? BG.cleanPin(el.value) : '';
     if (!pin) {
       BG.ui.toast('교사 비밀번호를 입력해 주세요.', 'error');
       if (el) el.focus();
@@ -1766,7 +1766,7 @@
       return;
     }
     if (!teacherReady()) {
-      BG.ui.screen(teacherGateHtml(), 'bm.teacher');
+      BG.showTeacherGate(teacherGateHtml(), 'bm.teacher');
       return;
     }
     if (BG.net.connected) {

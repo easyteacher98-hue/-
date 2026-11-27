@@ -551,7 +551,7 @@
     const pinEl = document.getElementById('class-pin');
     const teacherEl = document.getElementById('teacher-create-code');
     const name = nameEl ? nameEl.value.trim() : '';
-    const pin = pinEl ? String(pinEl.value || '').replace(/[^0-9]/g, '') : '';
+    const pin = pinEl ? BG.cleanPin(pinEl.value) : '';
     const code = BG.cleanClassCode(codeEl ? codeEl.value : '');
     const teacherCode = teacherEl ? String(teacherEl.value || '').trim() : '';
 
@@ -732,6 +732,11 @@
   });
 
   BG.router.add(/^\/teacher$/, 'teacher', function () {
+    // 이미 반 만들기 입력 화면이면 다시 그리지 않습니다. (연결이 끊겼다 붙어도 입력값이 남게)
+    if (document.body.dataset.screen === 'teacher' && document.getElementById('class-name')) {
+      BG.net.connect();
+      return;
+    }
     teacherHtml();
     BG.net.connect();
   });

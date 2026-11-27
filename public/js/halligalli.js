@@ -991,7 +991,7 @@
       return;
     }
     if (!teacherReady()) {
-      BG.ui.screen(teacherGateHtml(), 'hg.teacher');
+      BG.showTeacherGate(teacherGateHtml(), 'hg.teacher');
       return;
     }
 
@@ -1260,7 +1260,7 @@
   /** 교사 PIN 확인 → 성공하면 교사 기능(관전·방 초기화)이 열립니다. */
   BG.actions['hg.teacherAuth'] = function () {
     const el = document.getElementById('teacher-pin');
-    const pin = el ? String(el.value || '').replace(/[^0-9]/g, '') : '';
+    const pin = el ? BG.cleanPin(el.value) : '';
     if (!pin) {
       BG.ui.toast('교사 비밀번호를 입력해 주세요.', 'error');
       if (el) el.focus();
@@ -1710,7 +1710,7 @@
       return;
     }
     if (!teacherReady()) {
-      BG.ui.screen(teacherGateHtml(), 'hg.teacher');
+      BG.showTeacherGate(teacherGateHtml(), 'hg.teacher');
       return;
     }
     if (BG.net.connected) {

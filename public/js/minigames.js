@@ -735,10 +735,33 @@
     );
   }
 
+  /** 교사 확인(PIN) 화면 — 우리 반 선생님만 관전할 수 있습니다. */
+  function miniTeacherGateHtml(meta) {
+    return '<div class="teacher-gate">' +
+      '<div class="gate-emoji">👩‍🏫</div>' +
+      '<h1 class="page-title">' + esc(BG.className() || BG.state.classCode) + ' 선생님 확인</h1>' +
+      '<p class="page-sub">우리 반을 만들 때 정한 <b>교사 비밀번호(PIN)</b>를 입력하면<br>' +
+        esc(meta.title) + ' 모둠을 관전할 수 있어요.</p>' +
+      '<div class="gate-form">' +
+        '<input id="teacher-pin" class="input pin-input" type="password" inputmode="numeric" maxlength="8" ' +
+          'autocomplete="current-password" placeholder="교사 PIN">' +
+        '<button class="btn btn-primary" data-action="mini.teacherAuth">확인</button>' +
+      '</div>' +
+      '<a class="back-link" href="#/' + esc(meta.id) + '">← 모둠 선택</a>' +
+    '</div>';
+  }
+
   function renderTeacher(gameId) {
     const meta = miniGameMeta(gameId);
     if (!meta) { BG.navigate('/'); return; }
     ensureConnected();
+    // 기본 연습 교실(DEMO)은 PIN 없이 열립니다. 우리 반은 PIN 확인 뒤에 관전 화면을 보여 줍니다.
+    const needsPin = BG.state.classCode && BG.state.classCode !== 'DEMO' &&
+      !BG.teacherToken(BG.state.classCode);
+    if (needsPin) {
+      BG.showTeacherGate(miniTeacherGateHtml(meta), 'mg.' + meta.id + '.teacher');
+      return;
+    }
     const rooms = S.rooms.filter(function (r) { return r.gameId === gameId; });
     const cards = rooms.map(function (room) {
       const active = room.status === 'playing' || room.status === 'finished';
@@ -1091,6 +1114,19 @@
     if (name === 'category') BG.net.send({ t: 'option', category: el.value });
     else if (name === 'pieces') BG.net.send({ t: 'option', pieces: Number(el.value) });
     else if (name === 'initialPoints') BG.net.send({ t: 'option', initialPoints: Number(el.value) });
+  };
+
+  /** 교사 PIN 확인 → 성공하면 관전·방 초기화가 열립니다. */
+  BG.actions['mini.teacherAuth'] = function () {
+    const el = document.getElementById('teacher-pin');
+    const pin = el ? BG.cleanPin(el.value) : '';
+    if (!pin) {
+      BG.ui.toast('교사 비밀번호를 입력해 주세요.', 'error');
+      if (el) el.focus();
+      return;
+    }
+    if (!needServer()) return;
+    BG.net.send({ t: 'classAuth', code: BG.state.classCode, pin: pin });
   };
 
   BG.actions['mini.teacher'] = function (el) {

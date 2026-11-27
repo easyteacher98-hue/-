@@ -631,3 +631,35 @@ test('서버를 다시 켜도 만든 반과 PIN이 남아 있다 (파일 저장)
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('교사 PIN을 여러 번 틀리면 잠깐 잠기지만, 잠금 시간이 지나면 새로고침 없이 다시 시도할 수 있다', async function () {
+  const env = await boot({ pinLockMs: 400 });
+  const clients = [];
+  try {
+    const made = await newClass(env, null, { name: '잠금 반', pin: '7412' });
+    clients.push(made.client);
+    const c = made.client;
+    const code = made.code;
+
+    for (let i = 0; i < 6; i++) {
+      c.send({ t: 'classAuth', code: code, pin: '0000' });
+      const err = await c.next('error');
+      assert.equal(err.code, 'bad_pin');
+    }
+
+    // 6번 틀리면 잠깐 막힌다 (맞는 PIN도 잠금 중에는 거절)
+    c.send({ t: 'classAuth', code: code, pin: '7412' });
+    const locked = await c.next(function (m) { return m.t === 'error' && m.code === 'too_many_tries'; });
+    assert.match(locked.message, /초 뒤에 다시 시도/);
+
+    // 잠금 시간이 지나면 같은 연결에서도 다시 시도할 수 있다
+    await new Promise(function (r) { setTimeout(r, 600); });
+    c.send({ t: 'classAuth', code: code, pin: '7412' });
+    const ok = await c.next('class_auth_ok');
+    assert.equal(ok.class.code, code);
+    assert.ok(ok.teacherToken);
+  } finally {
+    clients.forEach(function (c) { c.close(); });
+    await env.hub.close();
+  }
+});

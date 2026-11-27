@@ -77,6 +77,16 @@
 
   BG.cleanClassCode = cleanClassCode;
 
+  /**
+   * 교사 PIN 정리: 전각 숫자(１２３４)와 공백을 반각 숫자로 바꾸고 숫자만 남깁니다.
+   * 휴대폰·태블릿 자판에서 전각 숫자가 들어와도 그대로 인정합니다.
+   */
+  BG.cleanPin = function (value) {
+    return String(value === undefined || value === null ? '' : value)
+      .replace(/[\uFF10-\uFF19]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); })
+      .replace(/[^0-9]/g, '');
+  };
+
   BG.state.classCode = cleanClassCode(storage.get('bg.class', ''));
 
   /** 우리 반 코드를 기억하고, 학생별 출석번호도 반별로 저장합니다. */
@@ -382,6 +392,29 @@
     if (event && event.target !== el) return;
     ui.closeModal();
   };
+
+  /**
+   * 교사 PIN 입력 화면을 그립니다.
+   * 이미 같은 화면이 떠 있으면 다시 그리지 않아 입력하던 PIN·포커스가 지워지지 않습니다.
+   * (방 목록 갱신·재접속 때 화면을 다시 그리는 경로가 많아서 여기서 한 번에 막습니다)
+   */
+  BG.showTeacherGate = function (html, screen) {
+    if (document.querySelector('.teacher-gate')) return false;
+    ui.screen(html, screen);
+    return true;
+  };
+
+  /* ---------- 교사 PIN 입력: Enter 키로도 확인 ---------- */
+  document.addEventListener('keydown', function (event) {
+    if (!event || event.key !== 'Enter') return;
+    const el = event.target;
+    if (!el || el.id !== 'teacher-pin') return;
+    const gate = el.closest ? el.closest('.teacher-gate') : null;
+    const btn = gate ? gate.querySelector('button[data-action]') : null;
+    if (!btn) return;
+    event.preventDefault();
+    btn.click();
+  });
 
   /* ---------- 방장: 참가자 내보내기 ----------
    * 인터넷 오류로 남은 자리·겹친 친구를 방장이 정리할 수 있게 합니다.

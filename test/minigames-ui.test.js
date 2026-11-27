@@ -8,6 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { JSDOM, VirtualConsole } = require('jsdom');
+const WebSocket = require('ws');
 const { createHub } = require('../server.js');
 
 function sleep(ms) {
@@ -363,6 +364,50 @@ test('미니게임 방에서도 뒤로가기로 화면을 벗어나면 자동으
   } finally {
     hw.close();
     sw.close();
+    await env.hub.close();
+  }
+});
+
+test('미니게임 교사 관전 화면도 PIN을 넣어야 열린다 (오목 선생님 화면)', async function () {
+  const env = await boot();
+  const code = await new Promise(function (resolve, reject) {
+    const ws = new WebSocket(env.base.replace('http://', 'ws://') + '/ws');
+    const timer = setTimeout(function () { reject(new Error('반 생성 시간 초과')); }, 4000);
+    ws.on('error', reject);
+    ws.on('open', function () {
+      ws.send(JSON.stringify({ t: 'classCreate', teacherCode: 'easy', name: '미니 관전 반', pin: '1379' }));
+    });
+    ws.on('message', function (raw) {
+      let msg = null;
+      try { msg = JSON.parse(String(raw)); } catch (err) { return; }
+      if (msg.t === 'class_created') {
+        clearTimeout(timer);
+        ws.close();
+        resolve(msg.code);
+      }
+    });
+  });
+  const dom = await openPage(env.base + '/?class=' + code);
+  const window = dom.window;
+  try {
+    await waitFor(function () { return window.document.querySelector('.game-grid'); }, '게임 포털');
+    await waitFor(function () { return window.BG.net.connected; }, '서버 연결', 4000);
+    window.location.hash = '#/gomoku/teacher';
+    await waitFor(function () { return window.document.querySelector('#teacher-pin'); }, '교사 PIN 화면(오목)');
+    assert.match(window.document.body.textContent, /선생님 확인/);
+
+    const pin = window.document.querySelector('#teacher-pin');
+    pin.value = '1379';
+    pin.dispatchEvent(new window.Event('input', { bubbles: true }));
+    pin.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await waitFor(function () {
+      return window.document.querySelector('.mg-teacher-grid') && !window.document.querySelector('#teacher-pin');
+    }, '교사 관전 화면');
+    assert.match(window.document.body.textContent, /관전/);
+    assert.equal(dom.__errors.length, 0, 'JS 오류: ' + dom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    window.close();
     await env.hub.close();
   }
 });

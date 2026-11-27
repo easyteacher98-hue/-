@@ -233,6 +233,8 @@ function createHub(options) {
     groupCapacity: Number(opts.groupCapacity || process.env.GROUP_CAPACITY || 4),
     maxBots: 4,
     overviewInterval: 150,
+    // 교사 PIN을 여러 번 틀렸을 때 잠기는 시간 (지나면 다시 시도할 수 있음)
+    pinLockMs: Number(opts.pinLockMs || process.env.PIN_LOCK_MS || 60000),
     // 반 목록을 파일에 남겨 서버가 다시 켜져도 우리 반 링크가 살아 있게 합니다.
     storePath: opts.store === false
       ? null
@@ -1520,15 +1522,25 @@ function createHub(options) {
   function authClassFor(ws, msg) {
     const cls = getClass(msg.code);
     if (!cls) return sendError(ws, '그 반 코드를 찾을 수 없습니다.', 'no_class');
+    const now = Date.now();
     if (ws.meta.failedPin >= 6) {
-      return sendError(ws, '비밀번호를 여러 번 틀렸습니다. 잠시 후 다시 시도해 주세요.', 'too_many_tries');
+      const waited = now - (ws.meta.failedPinAt || 0);
+      if (waited < settings.pinLockMs) {
+        const left = Math.max(1, Math.ceil((settings.pinLockMs - waited) / 1000));
+        return sendError(ws, '비밀번호를 여러 번 틀렸습니다. ' + left + '초 뒤에 다시 시도해 주세요.', 'too_many_tries');
+      }
+      // 잠금 시간이 지나면 다시 시도할 수 있습니다. (새로고침하지 않아도 됨)
+      ws.meta.failedPin = 0;
     }
     let ok = false;
     if (msg.token && isTeacherToken(cls, msg.token)) ok = true;
     const pin = sanitizePin(msg.pin);
     if (!ok && pin) {
       ok = safeEqualHex(hashPin(pin, cls.pinSalt), cls.pinHash);
-      if (!ok) ws.meta.failedPin = (ws.meta.failedPin || 0) + 1;
+      if (!ok) {
+        ws.meta.failedPin = (ws.meta.failedPin || 0) + 1;
+        ws.meta.failedPinAt = now;
+      }
     }
     if (!ok) return sendError(ws, '교사 비밀번호가 맞지 않습니다.', 'bad_pin');
 

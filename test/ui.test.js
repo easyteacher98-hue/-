@@ -895,3 +895,57 @@ test('방 나가기 버튼 없이 브라우저 뒤로가기만 해도 자동으�
     await env.hub.close();
   }
 });
+
+test('교사 PIN 입력은 방 목록이 갱신되어도 지워지지 않고, Enter 키로도 확인된다', async function () {
+  const env = await boot();
+  const code = await createClass(env, 'PIN 유지 반', '2469');
+  const dom = await openPage(env.base + '/?class=' + code);
+  const window = dom.window;
+  let student = null;
+  try {
+    await waitFor(function () { return window.document.querySelector('.game-grid'); }, '게임 포털');
+    await waitFor(function () { return window.BG.net.connected; }, '서버 연결', 4000);
+    click(window, '[href="#/halligalli/teacher"]');
+    const pinEl = await waitFor(function () { return window.document.querySelector('#teacher-pin'); }, '교사 PIN 화면');
+
+    let roomMsgs = 0;
+    window.BG.net.on('rooms', function () { roomMsgs += 1; });
+
+    // 반쯤 입력한 상태에서 학생이 모둠에 들어와 방 목록 갱신이 일어난다
+    type(window, '#teacher-pin', '24');
+    student = new WebSocket(env.ws);
+    await new Promise(function (resolve, reject) {
+      if (student.readyState === 1) { resolve(); return; }
+      student.on('open', resolve);
+      student.on('error', reject);
+    });
+    student.send(JSON.stringify({ t: 'join', gameId: 'halligalli', code: '1', classCode: code, number: 5, studentName: '학생' }));
+    await waitFor(function () { return roomMsgs >= 1; }, '방 목록 갱신');
+
+    // 입력하던 PIN과 입력칸이 그대로 남아 있다
+    assert.equal(window.document.querySelector('#teacher-pin'), pinEl, '같은 입력칸이 그대로 남아 있다');
+    assert.equal(window.document.querySelector('#teacher-pin').value, '24', '입력하던 PIN이 지워지지 않는다');
+
+    // 틀린 PIN을 넣어도 입력칸이 그대로 남고 안내가 뜬다
+    type(window, '#teacher-pin', '0000');
+    click(window, '[data-action="hg.teacherAuth"]');
+    await waitFor(function () {
+      const toast = window.document.getElementById('toast');
+      return toast && /맞지 않습니다/.test(toast.textContent);
+    }, '틀린 PIN 안내');
+    assert.equal(window.document.querySelector('#teacher-pin').value, '0000', '틀린 뒤에도 입력값이 남는다');
+
+    // 이어서 입력하고 Enter 키로 확인
+    type(window, '#teacher-pin', '2469');
+    window.document.querySelector('#teacher-pin').dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    );
+    await waitFor(function () { return window.document.querySelectorAll('.room-card').length === 6; }, '교사 대시보드');
+    assert.match(window.document.body.textContent, /교사 관전 모드/);
+    assert.equal(dom.__errors.length, 0, 'JS 오류: ' + dom.__errors.map(function (e) { return e.message; }).join(' | '));
+  } finally {
+    if (student) { try { student.close(); } catch (err) { /* ignore */ } }
+    window.close();
+    await env.hub.close();
+  }
+});
