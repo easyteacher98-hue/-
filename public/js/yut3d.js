@@ -23,11 +23,11 @@
     if (aspect >= 1.35) {
       return {
         wide: true,
-        target: { x: 2.5, z: 0 },
-        halfW: 9.0,
+        target: { x: 2.9, z: 0 },
+        halfW: 9.6,
         halfD: 6.2,
-        mat: { x: 8.3, z: 0, w: 6.6, h: 2.6 },
-        sticks: { x0: 8.3 - 2.1, dx: 1.4, z: 0 },
+        mat: { x: 9.2, z: -0.2, w: 6.4, h: 2.6 },
+        sticks: { x0: 9.2 - 2.1, dx: 1.4, z: -0.2 },
         sticksZ: 0
       };
     }
@@ -346,8 +346,8 @@
       cap.position.y = 0.56;
       group.add(cap);
       const label = labelSprite(THREE, player.number || (player.name || '').slice(0, 2), '#4a2f1a');
-      label.position.y = 0.95;
-      label.scale.set(0.5, 0.5, 1);
+      label.position.y = 1.02;
+      label.scale.set(0.62, 0.62, 1);
       group.add(label);
       group.visible = false;
       return group;
