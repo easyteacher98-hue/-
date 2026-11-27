@@ -787,6 +787,13 @@
     return out.join('');
   }
 
+  /** 받침에 따라 '로 / 으로' 를 고릅니다. (점→으로, 과→로) */
+  function roJosa(ch) {
+    const code = ch ? ch.charCodeAt(0) - 0xac00 : -1;
+    const hasFinal = code >= 0 && code <= 11171 && code % 28 !== 0;
+    return hasFinal ? '으로' : '로';
+  }
+
   function wordchainBoard(state) {
     const myTurn = state.status === 'playing' && state.turnPlayerId === state.youId;
     const you = state.players.find(function (p) { return p.id === state.youId; });
@@ -796,17 +803,20 @@
       wordchainUI.turnNo = state.turnNo;
     }
     const required = state.required;
-    const prompt = required === null
-      ? '첫 낱말을 자유롭게 말해 보세요!'
-      : '“' + required + '”로 시작하는 낱말';
+    const startPhrase = required === null
+      ? '첫 낱말'
+      : '‘' + required + '’' + roJosa(required) + ' 시작하는 낱말';
 
     let turnLine;
     if (state.status === 'finished') {
       turnLine = '🏁 게임 끝! ' + esc((state.players.find(function (p) { return p.id === state.winnerId; }) || {}).name || '') + '님 우승!';
     } else if (myTurn) {
-      turnLine = '내 차례! ' + esc(prompt) + '을 입력하세요.';
+      turnLine = required === null
+        ? '내 차례! 첫 낱말을 자유롭게 말해 보세요!'
+        : '내 차례! ' + esc(startPhrase) + '을 입력하세요.';
     } else {
-      turnLine = esc(turnName || '') + '님 차례… (' + esc(prompt) + ')';
+      turnLine = esc(turnName || '') + '님 차례… ' +
+        (required === null ? '(첫 낱말 고르는 중)' : '(' + esc(startPhrase) + ')');
     }
 
     const timer = state.status === 'playing' && state.deadline
@@ -818,7 +828,7 @@
     const input = state.status === 'playing' && myTurn
       ? '<div class="mg-wc-form">' +
           '<input id="mg-wc-input" class="input mg-wc-input" maxlength="10" autocomplete="off" ' +
-            'placeholder="' + (required === null ? '예: 사과' : '‘' + esc(required) + '’로 시작하는 낱말') + '" ' +
+            'placeholder="' + (required === null ? '예: 사과' : esc(startPhrase)) + '" ' +
             'value="' + esc(wordchainUI.draft) + '">' +
           '<button class="btn btn-primary" data-action="mini.wcSay">말하기</button>' +
         '</div>' +
