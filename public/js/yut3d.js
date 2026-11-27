@@ -14,6 +14,9 @@
   const WIN = { x: 11.6, z: 11.6 };          // 말판 크기(월드 좌표)
   const CELL = WIN.x / 5;                     // 5x5 격자 한 칸
 
+  /* 말판 그림의 여백 비율 — 그림의 자리(점)와 3D 말 위치를 똑같이 맞추는 데 씁니다. */
+  const BOARD_MARGIN = 0.075;
+
   /**
    * 화면 비율에 따른 배치를 정합니다.
    * - 넓은 화면(노트북·태블릿 가로): 윷가락 자리를 말패 오른쪽에 두어 화면을 꿉 채 씁니다.
@@ -82,7 +85,7 @@
       ctx.stroke();
     }
 
-    const margin = size * 0.075;
+    const margin = size * BOARD_MARGIN;
     const span = size - margin * 2;
     const toPx = function (p) {
       return { x: margin + (p.x / 5) * span, y: margin + (p.y / 5) * span };
@@ -356,9 +359,12 @@
     function nodeToWorld(node) {
       const p = nodePos[node];
       if (!p) return { x: 0, z: 0 };
+      // 그림(texture)에서 자리(점)가 놓인 비율과 같은 비율로 3D 위치를 잡습니다.
+      const innerX = WIN.x * (1 - BOARD_MARGIN * 2);
+      const innerZ = WIN.z * (1 - BOARD_MARGIN * 2);
       return {
-        x: (p.x / 5 - 0.5) * WIN.x,
-        z: (p.y / 5 - 0.5) * WIN.z
+        x: (p.x / 5 - 0.5) * innerX,
+        z: (p.y / 5 - 0.5) * innerZ
       };
     }
 
