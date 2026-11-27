@@ -19,29 +19,28 @@
 
   /**
    * 화면 비율에 따른 배치를 정합니다.
-   * - 넓은 화면(노트북·태블릿 가로): 윷가락 자리를 말패 오른쪽에 두어 화면을 꿉 채 씁니다.
-   * - 좀은 화면(휴대폰·태블릿 세로): 윷가락 자리를 말판 앞쪽 아래에 둡니다.
+   * - 넓은 화면(노트북·태블릿 가로): 윷가락 자리를 말판 오른쪽에 두어 화면을 꽉 채웁니다.
+   *   윷가락을 크게 키우면서 윷가락 자리(매트)도 그만큼 넓혔습니다.
+   * - 좁은 화면(휴대폰·태블릿 세로): 윷가락 자리를 말판 앞쪽(카메라 쪽) 아래에 둡니다.
    */
   function layoutFor(aspect) {
     if (aspect >= 1.35) {
       return {
         wide: true,
-        target: { x: 2.9, z: 0.8 },
-        halfW: 9.6,
-        halfD: 6.2,
-        mat: { x: 9.2, z: -0.2, w: 6.4, h: 2.6 },
-        sticks: { x0: 6.8, dx: 1.6, z: -0.2 },
-        sticksZ: 0
+        target: { x: 2.5, z: 0.2 },
+        halfW: 8.7,
+        halfD: 6.5,
+        mat: { x: 8.6, z: 1.3, w: 4.4, h: 4.2 },
+        sticks: { x: 8.6, z0: -0.28, dz: 1.05 }
       };
     }
     return {
       wide: false,
       target: { x: 0, z: 1.4 },
-      halfW: 6.4,
-      halfD: 9.0,
-      mat: { x: 0, z: 7.7, w: 6.6, h: 2.4 },
-      sticks: { x0: -2.4, dx: 1.6, z: 7.7 },
-      sticksZ: 7.7
+      halfW: 6.5,
+      halfD: 10.1,
+      mat: { x: 0, z: 8.15, w: 4.4, h: 4.2 },
+      sticks: { x: 0, z0: 6.58, dz: 1.05 }
     };
   }
 
@@ -381,6 +380,203 @@
     return sprite;
   }
 
+  /* ---------------- 윷가락 모양과 무늬 ----------------
+   * 전통 윷가락은 반달 단면의 반원기둥입니다.
+   *  · 둥근 등면  : 진한 나무껍질색 바탕 + 검정 × 3개  (던져서 이 면이 위로 오면 '펴진 것')
+   *  · 평평한 배면: 밝은 아이보리 속살나무색        (이 면이 위로 오면 '뒤집힌 것' → 한 개가 도/개/걸/윷/모)
+   *  · 빽도 윷가락(0번): 배면 가운데에 × 1개 → 밝은 면에 × 가 보이면 바로 '빽도'
+   * 무늬는 캔버스로 직접 그려서 캔버스 텍스처로 올립니다. (외부 이미지 없음)
+   */
+  const STICK = { L: 3.1, R: 0.37 };
+  const STICK_REST_Y = STICK.R / 2 + 0.02;
+
+  /* 던져서 떨어진 느낌이 나도록 윷가락마다 아주 조금씩 비뚤어지게 둡니다. */
+  const STICK_JITTER = [
+    { dx: 0, dz: 0.03, yaw: -0.045 },
+    { dx: 0.035, dz: -0.04, yaw: 0.03 },
+    { dx: -0.03, dz: 0.05, yaw: 0.05 },
+    { dx: 0.02, dz: -0.03, yaw: -0.06 }
+  ];
+
+  function canvasEl(w, h) {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    return canvas;
+  }
+
+  function canvasTexture(THREE, canvas) {
+    // 이 장면은 outputEncoding 을 기본(선형)으로 그리므로, 무늬 색을 그대로 보이게 sRGB 표시를 켜지 않습니다.
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.anisotropy = 8;
+    return texture;
+  }
+
+  function drawCross(ctx, cx, cy, size, color, lineWidth) {
+    const half = size / 2;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    ctx.moveTo(cx - half, cy - half);
+    ctx.lineTo(cx + half, cy + half);
+    ctx.moveTo(cx + half, cy - half);
+    ctx.lineTo(cx - half, cy + half);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** 둥근 등면 무늬 — 진한 나무껍질색 + × 3개 */
+  function barkTexture(THREE) {
+    const R = STICK.R;
+    const arcW = 256;
+    const ppu = arcW / (Math.PI * R);          // 가로·세로 같은 비율(px per world unit)
+    const arcH = Math.round(STICK.L * ppu);
+    const canvas = canvasEl(arcW, arcH);
+    const ctx = canvas.getContext('2d');
+
+    // 바탕 — 가운데가 조금 밝고, 평평한 면과 만나는 양 가장자리는 어둡게 (등이 둥글게 보입니다)
+    const base = ctx.createLinearGradient(0, 0, arcW, 0);
+    base.addColorStop(0, '#7a4820');
+    base.addColorStop(0.14, '#9c6229');
+    base.addColorStop(0.5, '#bb7b39');
+    base.addColorStop(0.86, '#9c6229');
+    base.addColorStop(1, '#7a4820');
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, arcW, arcH);
+
+    // 나뭇결 (길이 방향)
+    for (let i = 0; i < 30; i++) {
+      const x = (i + 0.5) * (arcW / 30);
+      ctx.beginPath();
+      ctx.strokeStyle = i % 3 === 0 ? 'rgba(58,30,10,0.18)' : 'rgba(210,158,100,0.14)';
+      ctx.lineWidth = 1.4 + (i % 4) * 0.7;
+      for (let y = 0; y <= arcH; y += 18) {
+        const xx = x + Math.sin(y / 70 + i * 0.7) * 3.4;
+        if (y === 0) ctx.moveTo(xx, y);
+        else ctx.lineTo(xx, y);
+      }
+      ctx.stroke();
+    }
+
+    // × 3개 — 길이 방향으로 나란히
+    const size = 0.33 * ppu;
+    const lineWidth = Math.max(6, 0.05 * ppu);
+    [0.17, 0.5, 0.83].forEach(function (f, i) {
+      drawCross(ctx, arcW / 2 + (i === 1 ? 5 : -5), arcH * f, size, '#2a1608', lineWidth);
+    });
+
+    return canvasTexture(THREE, canvas);
+  }
+
+  /** 평평한 배면 무늬 — 밝은 아이보리 속살나무색. withMark 면 가운데 × 1개(빽도 윷가락) */
+  function bellyTexture(THREE, withMark) {
+    const w = 512;
+    const ppu = w / STICK.L;
+    const h = Math.round(2 * STICK.R * ppu);
+    const canvas = canvasEl(w, h);
+    const ctx = canvas.getContext('2d');
+
+    const base = ctx.createLinearGradient(0, 0, 0, h);
+    base.addColorStop(0, '#f2dfb8');
+    base.addColorStop(0.45, '#fbeed3');
+    base.addColorStop(1, '#ebd2a5');
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, w, h);
+
+    // 결
+    for (let i = 0; i < 9; i++) {
+      const y = (i + 0.5) * (h / 9);
+      ctx.beginPath();
+      ctx.strokeStyle = i % 2 ? 'rgba(198,152,98,0.20)' : 'rgba(228,196,152,0.32)';
+      ctx.lineWidth = 1.6;
+      for (let x = 0; x <= w; x += 20) {
+        const yy = y + Math.sin(x / 90 + i) * 1.6;
+        if (x === 0) ctx.moveTo(x, yy);
+        else ctx.lineTo(x, yy);
+      }
+      ctx.stroke();
+    }
+
+    // 또렷한 윤곽선
+    ctx.strokeStyle = 'rgba(138,92,44,0.6)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(2, 2, w - 4, h - 4);
+
+    if (withMark) {
+      drawCross(ctx, w / 2, h / 2, h * 0.56, '#3a2010', Math.max(5, h * 0.07));
+    }
+
+    return canvasTexture(THREE, canvas);
+  }
+
+  /** 양 끝 단면 — 밝은 나뭇결 */
+  function endTexture(THREE) {
+    const size = 256;
+    const canvas = canvasEl(size, size);
+    const ctx = canvas.getContext('2d');
+    const c = size / 2;
+    const g = ctx.createRadialGradient(c, c, 6, c, c, c);
+    g.addColorStop(0, '#f7e4bd');
+    g.addColorStop(0.7, '#eed4a5');
+    g.addColorStop(1, '#d8b57e');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    for (let r = 14; r < c; r += 13) {
+      ctx.beginPath();
+      ctx.arc(c, c, r, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(170,126,76,0.22)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
+    return canvasTexture(THREE, canvas);
+  }
+
+  /**
+   * 윷가락 하나를 만듭니다.
+   * 중심(회전축)은 반달 단면을 감싸는 상자의 가운데 = 바닥에서 R/2 위입니다.
+   * 그래서 앞면(평평한 배면)이 위로 오거나 뒤집혀도 높이가 같습니다.
+   */
+  function buildStick(THREE, index, textures) {
+    const R = STICK.R;
+    const L = STICK.L;
+    const pivotY = -R / 2;
+    const group = new THREE.Group();
+
+    // 1) 둥근 등면 — 반원기둥의 곡면만
+    const arcGeo = new THREE.CylinderGeometry(R, R, L, 36, 1, true, 0, Math.PI);
+    const arc = new THREE.Mesh(arcGeo, new THREE.MeshLambertMaterial({ map: textures.bark }));
+    arc.rotation.z = Math.PI / 2;
+    arc.position.y = pivotY;
+    group.add(arc);
+
+    // 2) 평평한 배면 — 빽도 윷가락(0번)만 가운데 × 1개
+    const flatGeo = new THREE.PlaneGeometry(L, R * 2);
+    const flat = new THREE.Mesh(flatGeo, new THREE.MeshLambertMaterial({
+      map: index === 0 ? textures.bellyMark : textures.belly
+    }));
+    flat.rotation.x = Math.PI / 2;
+    flat.position.y = pivotY + 0.004;
+    group.add(flat);
+
+    // 3) 양 끝 단면 (반원)
+    const capGeo = new THREE.CircleGeometry(R, 28, 0, Math.PI);
+    const capMat = new THREE.MeshLambertMaterial({ map: textures.end });
+    const capFront = new THREE.Mesh(capGeo, capMat);
+    capFront.rotation.y = Math.PI / 2;
+    capFront.position.set(L / 2, pivotY, 0);
+    group.add(capFront);
+    const capBack = new THREE.Mesh(capGeo, capMat);
+    capBack.rotation.y = -Math.PI / 2;
+    capBack.position.set(-L / 2, pivotY, 0);
+    group.add(capBack);
+
+    group.userData.parts = [arcGeo, flatGeo, capGeo];
+    return group;
+  }
+
   function createBoard(container, options) {
     const THREE = window.THREE;
     const opts = options || {};
@@ -479,16 +675,17 @@
 
     // 윷가락 놓는 자리(펠트 매트)
     const matTexture = (function () {
-      const w = 640;
-      const h = 220;
+      const w = 480;
+      const h = 460;
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
       // 펠트 바탕
       const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, '#fff9ee');
-      g.addColorStop(1, '#f4e4c8');
+      g.addColorStop(0, '#faefd8');
+      g.addColorStop(0.55, '#f3e2c2');
+      g.addColorStop(1, '#e8d2ab');
       ctx.fillStyle = g;
       roundRectPath(ctx, 4, 4, w - 8, h - 8, 26);
       ctx.fill();
@@ -521,40 +718,35 @@
     scene.add(mat);
 
     /* ----- 윷가락 4개 ----- */
+    const stickTextures = {
+      bark: barkTexture(THREE),
+      belly: bellyTexture(THREE, false),
+      bellyMark: bellyTexture(THREE, true),
+      end: endTexture(THREE)
+    };
+
+    /** 윷가락이 쉬는 자리·각도 (던져서 떨어진 모양) */
+    function restOf(index, lay) {
+      const jitter = STICK_JITTER[index] || { dx: 0, dz: 0, yaw: 0 };
+      return {
+        x: lay.sticks.x + jitter.dx,
+        y: STICK_REST_Y,
+        z: lay.sticks.z0 + index * lay.sticks.dz + jitter.dz,
+        yaw: jitter.yaw
+      };
+    }
+
+    function poseAtRest(stick, rest, flipped) {
+      stick.position.set(rest.x, rest.y, rest.z);
+      stick.rotation.set(flipped ? Math.PI : 0, rest.yaw, 0);
+    }
+
     const sticks = [];
-    const stickColors = ['#e8cfa4', '#e3c493', '#ecd3ac', '#e0bf8d'];
     for (let i = 0; i < 4; i++) {
-      const group = new THREE.Group();
-      const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.19, 0.19, 1.42, 20, 1, false, 0, Math.PI),
-        new THREE.MeshLambertMaterial({ color: stickColors[i] })
-      );
-      body.rotation.z = Math.PI / 2;
-      body.position.y = 0.0;
-      group.add(body);
-
-      // 납작한 면(배) — 흰 칠
-      const flat = new THREE.Mesh(
-        new THREE.BoxGeometry(1.4, 0.05, 0.34),
-        new THREE.MeshLambertMaterial({ color: '#fffaf0' })
-      );
-      flat.position.set(0, -0.06, 0);
-      group.add(flat);
-
-      // 양 끝 붉은 띠 (전통 윷가락 느낌)
-      [-0.62, 0.62].forEach(function (x) {
-        const band = new THREE.Mesh(
-          new THREE.BoxGeometry(0.07, 0.34, 0.34),
-          new THREE.MeshLambertMaterial({ color: '#c9503f' })
-        );
-        band.position.set(x, -0.01, 0);
-        group.add(band);
-      });
-
+      const group = buildStick(THREE, i, stickTextures);
       group.userData.index = i;
-      group.userData.rest = { x: layout.sticks.x0 + i * layout.sticks.dx, z: layout.sticks.z };
-      group.position.set(group.userData.rest.x, 0.17, group.userData.rest.z);
-      group.rotation.set(0, 0, 0);
+      group.userData.rest = restOf(i, layout);
+      poseAtRest(group, group.userData.rest, false);
       scene.add(group);
       sticks.push(group);
     }
@@ -728,22 +920,19 @@
       sticks.forEach(function (stick, i) {
         const delay = i * 70;
         const t = Math.min(1, Math.max(0, (elapsed - delay) / duration));
-        const from = stickAnim.from[i] || { x: stick.userData.rest.x, y: 0.17, z: stick.userData.rest.z };
-        const targetY = 0.17;
+        const rest = stick.userData.rest;
+        const from = stickAnim.from[i] || { x: rest.x, y: rest.y, z: rest.z, rx: 0, ry: rest.yaw, rz: 0 };
         // 포물선 낙하 + 여러 번 구르기
         const e = 1 - Math.pow(1 - t, 3);
         const spin = (1 - e) * 16 + 2;
-        stick.position.x = from.x + (stick.userData.rest.x - from.x) * e;
-        stick.position.z = from.z + (stick.userData.rest.z - from.z) * e;
-        stick.position.y = targetY + (1 - e) * (2.6 + i * 0.1) * Math.abs(Math.cos(t * Math.PI * 1.4));
+        stick.position.x = from.x + (rest.x - from.x) * e;
+        stick.position.z = from.z + (rest.z - from.z) * e;
+        stick.position.y = rest.y + (1 - e) * (2.6 + i * 0.1) * Math.abs(Math.cos(t * Math.PI * 1.4));
         const flipped = stickAnim.values[i];
         stick.rotation.x = (flipped ? Math.PI : 0) * e + spin * (1 - e) * 0.9;
-        stick.rotation.y = (from.ry || 0) + spin * (1 - e) * 0.5;
+        stick.rotation.y = rest.yaw * e + (1 - e) * spin * 0.5;
         stick.rotation.z = (from.rz || 0) * (1 - e);
-        if (t >= 1) {
-          stick.position.set(stick.userData.rest.x, targetY, stick.userData.rest.z);
-          stick.rotation.set(flipped ? Math.PI : 0, 0, 0);
-        }
+        if (t >= 1) poseAtRest(stick, rest, flipped);
       });
       if (elapsed > duration + 400) stickAnim.active = false;
     }
@@ -793,9 +982,9 @@
       mat.geometry = new THREE.PlaneGeometry(layout.mat.w, layout.mat.h);
       mat.position.set(layout.mat.x, 0.01, layout.mat.z);
       sticks.forEach(function (stick, i) {
-        stick.userData.rest = { x: layout.sticks.x0 + i * layout.sticks.dx, z: layout.sticks.z };
+        stick.userData.rest = restOf(i, layout);
         if (changed && !stickAnim.active) {
-          stick.position.set(stick.userData.rest.x, 0.17, stick.userData.rest.z);
+          poseAtRest(stick, stick.userData.rest, stick.rotation.x !== 0);
         }
       });
       updateCamera();
@@ -836,6 +1025,15 @@
       if (observer) observer.disconnect();
       tokens.forEach(function (token) { scene.remove(token.group); });
       tokens.clear();
+      sticks.forEach(function (stick) {
+        (stick.userData.parts || []).forEach(function (geo) {
+          if (geo && geo.dispose) geo.dispose();
+        });
+      });
+      Object.keys(stickTextures).forEach(function (key) {
+        const texture = stickTextures[key];
+        if (texture && texture.dispose) texture.dispose();
+      });
       boardGeo.dispose();
       boardTexture.dispose();
       rimGeo.dispose();
